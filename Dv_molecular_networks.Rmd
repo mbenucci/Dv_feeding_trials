@@ -1,0 +1,1292 @@
+---
+title: "Untangling molecular food-webs to investigate the impacts of _Dikerogammarus villosus_ in the UK"
+author: "Marco Benucci"
+date: "3 September 2019"
+output: pdf_document
+---
+
+```{r knitr setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r environment setup, include=F}
+## R(v3.5.1 - Win)
+#.libPaths(c("D:\\Dropbox\\PhD Hull\\PhD docs\\Thesis\\R_stats\\rlib3.5_win", .libPaths("D:\\Dropbox\\PhD Hull\\PhD docs\\Thesis\\R_stats\\rlib3.5_win")))
+
+## R(v3.5.1 - OSX)
+#.libPaths(c("D:\\Dropbox\\PhD Hull\\PhD docs\\Thesis\\R_stats\\rlib3.5_osx", .libPaths("D:\\Dropbox\\PhD Hull\\PhD docs\\Thesis\\R_stats\\rlib3.5_osx")))
+
+## R(v3.5.1 - Ubuntu)
+.libPaths(c("/home/mb/Dropbox/PhD Hull/PhD docs/Thesis/R_stats/rlib3.5_unix", .libPaths("/home/mb/Dropbox/PhD Hull/PhD docs/Thesis/R_stats/rlib3.5_unix")))
+```
+
+```{r directory setup, include=FALSE}
+dir()
+rm(list=ls())
+ls()
+```
+
+#Setting working directory and packages
+
+The analysis was done on R (R Core Team, 2018) using the following environment and packages.
+
+```{r packages loading, include=F}
+pack.list = c("aod","ape","bipartite","cowplot","devtools","dplyr","EcoSimR","ggplot2","ggsignif","gplots","grid","gridExtra","iNEXT","lattice","lme4","lmtest","MASS","mgcv","msa","network","plyr","reshape2","spaa","stringi","UpSetR","vegan","zoo")
+new.packages = pack.list[!(pack.list %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages, repos="https://cran.rstudio.com")
+lapply(pack.list, require, character.only=T)
+
+#"AED","igraph","msa","phyloseq","ggnetwork"
+```
+
+```{r session info}
+sessionInfo()
+```
+
+# 1. Input files and Quality Control.
+
+The samples were processed on two different sequencing runs. 28 February corresponds to the feeding trials involving 2 of the 3 prey species; 4 August instead include the last prey species plus the wild samples.
+
+```{r input files}
+raw_feb = read.csv("data/CO1-Dvfeb-merge-forwonly_nonchimera-c1-cov2-id97-by-taxonomy-readcounts.blast.csv")
+raw_aug = read.csv("data/CO1Aug17-merge-forwonly-nonchimera-c97-cov2_id97-by-taxonomy-readcounts.blast.csv")
+head(raw_feb)
+head(raw_aug)
+```
+
+```{r taxonomy file, include=T}
+## Custom function to format the taxonomy column
+
+format_taxonomy <- function(input_data){
+  for (t in as.data.frame(input_data)){
+    n = gsub("\\['|\\']", "", t)
+    i = gsub("\\'", "", n)
+    taxa.split = data.frame(cbind(i))
+  }
+  return(taxa.split)
+}
+
+## First input file
+taxonomy.feb = raw_feb$taxomomy
+raw_feb = raw_feb[,!(colnames(raw_feb) %in% 'taxomomy')]
+
+taxa.feb=format_taxonomy(taxonomy.feb)
+taxa.feb=data.frame(taxa.feb)
+
+## Second input file
+taxonomy.aug = raw_aug$taxomomy
+raw_aug = raw_aug[,!(colnames(raw_aug) %in% 'taxomomy')]
+
+taxa.aug=format_taxonomy(taxonomy.aug)
+taxa.aug=data.frame(taxa.aug)
+
+## Writing taxonomy outputs
+write.csv(taxa.feb, "R_outputs/CO1DvFeb_taxonomy.csv")
+write.csv(taxa.aug, "R_outputs/CO1DvAug_taxonomy.csv")
+```
+
+Each initial input file was generated as the result of two separate operations. First DNA centroids were assigned against reference database, the reads that resulted unassigned were then assigned against the NCBI nt database. Each operation generated two separate files which were then merged. The following step is to remove potential duplicate taxa records that would prevent R from definying the row names as the taxa names. Because we removed the last column with the taxonomy information, we can use the whole frame; otherwise we would have needed to avoid the last column in each frame.
+
+```{r removing duplicates, include=T}
+raw_feb = as.data.frame(raw_feb %>% group_by(X.OTU.ID) %>% summarise_all(list(sum)))
+raw_aug = as.data.frame(raw_aug %>% group_by(X.OTU.ID) %>% summarise_all(list(sum)))
+```
+
+We can now set up the rownames for each data frame equal to the species names, and we can remove the first column.
+
+```{r data frames rownames, include=F}
+## Setting up rownames equal to the OTU ID
+rownames(raw_feb) = raw_feb$X.OTU.ID
+rownames(raw_aug) = raw_aug$X.OTU.ID
+
+## Removing the OTU ID column
+dv_feb = raw_feb[,!(colnames(raw_feb) %in% 'X.OTU.ID')]
+dv_aug = raw_aug[,!(colnames(raw_aug)%in% 'X.OTU.ID')]
+```
+
+# 2. Read depth per sample
+
+Since the data were generated into three separate sequencing runs, we check the read depth of all the samples across the three separate frames. We first remove all empty samples before calculating mean and standard deviation values across all three separate frames. Total number of samples were respectively, `dv_feb` (sequencing run from February 2017) Ntot=320; `dv_aug` (sequencing run from Augusut 2017) Ntot=350.
+
+```{r samples, include=T}
+## First frame
+feb_reads = dv_feb
+
+## Second frame
+aug_reads = dv_aug
+
+#[,-c(333:401)]
+```
+
+```{r plot read depth, include=T, echo=FALSE}
+boxplot(colSums(feb_reads), colSums(aug_reads), ylab="N reads", xlab="Data frames", main = "Read depth of D.villosus samples", names=c("dv_feb\n(Feb2017)", "dv_aug\n(Aug2017)"), las=1, cex.axis=0.8)
+```
+
+```{r mean read depth, include=F}
+feb_reads = subset(feb_reads, select=colSums(feb_reads) > 0)
+aug_reads = subset(aug_reads, select=colSums(aug_reads) > 0)
+
+## Mean values
+mean(colSums(feb_reads))
+mean(colSums(aug_reads))
+
+hist(colSums(feb_reads), breaks=20)
+hist(colSums(aug_reads), breaks=20)
+```
+
+Considering our normalisation steps during the libraries preparations, we expect the read coverage per sample to be normally distributed in each run. With this in mind we tested for normality and then we tested for differences in the read depth between the different plates. 
+
+The results show that all the plates were not significantly difference in regards to reads depth: `ha.reads` and `ha1.reads` (t-test: t = 0.62067, df = 142, p-value = 0.5358), `ha.reads` and `ha2.reads` (t-test: t = -0.95017, df = 407, p-value = 0.3426), `ha1.reads` and `ha2.reads` (t-test: t = -1.7813, df = 439, p-value = 0.07555).
+
+```{r reads distribution, include=T, echo=F}
+shapiro.test(colSums(feb_reads))
+shapiro.test(colSums(aug_reads))
+
+t.test(colSums(feb_reads), colSums(aug_reads), var.equal = T)
+```
+
+To remove low coverage samples we decide to retain samples that contained N reads greater than mean-sd. This was possible for only the data from the run done in February 2017. For the data frame from August 2017, the mean-sd value came back as negative, so we decided to apply an arbitrary fixed threshold of 2000 reads.
+
+```{r read depth filter, include=T}
+cov_feb = mean(colSums(feb_reads))-sd(colSums(feb_reads))
+cov_aug = mean(colSums(aug_reads))-sd(colSums(aug_reads))
+
+feb_cover = subset(feb_reads, select = colSums(feb_reads) >= 2000)
+aug_cover = subset(aug_reads, select = colSums(aug_reads) >= 2000)
+```
+
+After this initial low coverage filter we retained 98.5%, and 99.5% of the total number of reads; and respectively 75%, and 75.2% number of samples.
+
+```{r reads survival boxplot, include=TRUE, echo=FALSE}
+boxplot(colSums(feb_cover), colSums(aug_cover), ylab="N reads", xlab="Data frames", main = "Read depth of D.villosus metabarcoding samples greater than mean-sd", names=c("feb_cover\n(Feb2017)", "aug_cover\n(Aug2017)"), las=1, cex.axis=0.8)
+```
+
+```{r read survival percentage, include=T}
+(sum(feb_cover)/sum(feb_reads))*100
+(sum(aug_cover)/sum(aug_reads))*100
+
+(count(colSums(feb_cover) > 0)[2]/count(colSums(feb_reads) > 0)[2])*100
+(count(colSums(aug_cover) > 0)[2]/count(colSums(aug_reads) > 0)[2])*100
+```
+
+# 3. Removal of untarget sample and taxa
+
+We check first presence of unwanted taxa and high rank assignment into our data frames. In particular `unassigned` reads, and higher taxa such as unknown `Eukaryota`, `Fungi` and `Bacteria` are going to be removed since they won't be informative at all further downstream. To make the process efficient, we first remove all taxa that have no reads at all as a consequence of previous quality control steps, we then check for the presence of unwanted taxa.
+
+```{r samples, include=T}
+## First frame
+#colnames(feb_cover)
+feb_samples = feb_cover[,-c(grep("WB|GW|RB", colnames(feb_cover)))]
+
+## Second frame
+#colnames(aug_cover)
+aug_samples = aug_cover[,-c(grep("Ha|CH", colnames(aug_cover)))]
+```
+
+The first data frame includes only feeding trials, therefore we need to keep few taxa that might be lab contaminants, specifically `Philodina_roseola`. The second data frame instead, contains few feeding trials samples plus the gut contents samples of wild `D. villosus` and wild `G. tigrinus`, and the eDNA samples. In this latter frame we then need to expand the list to explude the higher ranks.
+
+```{r removing unwanted taxa}
+# First frame
+feb_samples = subset(feb_samples, subset = rowSums(feb_samples) > 0)
+#rownames(feb_samples)
+
+discard.feb = c("Hymenoptera","Thalassiosira_pseudonana","unassigned")
+
+feb.clean = feb_samples[!rownames(feb_samples) %in% discard.feb,]
+
+# Second frame
+aug_samples = subset(aug_samples, subset = rowSums(aug_samples) > 0)
+#rownames(aug_samples)
+
+discard.aug = c("Abramis_brama","Anser","Aphanomyces","Arthropoda_environmental_sample","Ascomorpha_ecaudis","Asplanchna_sieboldi","Brachionus","Brachionus_angularis","Brachionus_calyciflorus","Chromulinales","Chrysophyceae_sp.","Cochliopodium","Cochliopodium_actinophorum","Cochliopodium_sp._SG-2014","Cyclostephanos_dubius","Cyclostephanos_invisitatus","Cyclostephanos_sp._WTC16","Didymella_pinodes","Dinobryon","Dinobryon_divergens","Dinophyceae","Dissotrocha_macrostyla","Encyonema","Euchlanis_dilatata","Eukaryota","Fistulifera_solaris","Fusarium","Gomphonema_parvulum","Gymnocephalus","Hymenoptera","Ilyonectria_destructans","invertebrate_environmental_sample","Kellicottia_sp._BIOUG30062-G11","Keratella","Keratella_cochlearis","Keratella_quadrata","Lagenidium","Leptolegnia_sp._BOLD:AAX5717","Mallomonas_sp.","Melosira_ambiqua","Metazoa","Oncorhynchus_mykiss","Oomycetes","Paraphysomonas_sp.","Penicillium_sclerotiorum","Phytophthora","Ploima","Pseudorasbora_parva","Pythium","Pythium_marsipium","Saprolegnia_delica","Saprolegniaceae","Sellaphora_obesa","Skeletonema_potamos","Sordariomycetes","Stephanodiscus","Stephanodiscus_cf._minutulus","Tetracladium","Tetradesmus_obliquus","Thalassiosira_pseudonana","unassigned","Uncinais_uncinata","uncultured_Pythium","Urocentrum_turbo","Woloszynskia","Yamagishiella_unicocca","zooplankton_environmental_sample")
+
+aug.clean = aug_samples[!rownames(aug_samples) %in% discard.aug,]
+```
+
+We retained approx. 87.4%, and 76.3% of the initial N reads.
+
+```{r retained reads and samples, include=T}
+(sum(feb.clean)/sum(feb_reads))*100
+(sum(aug.clean)/sum(aug_reads))*100
+
+((sum(feb_cover)/sum(feb_reads))*100-(sum(feb.clean)/sum(feb_reads))*100)
+((sum(aug_cover)/sum(aug_reads))*100-(sum(aug.clean)/sum(aug_reads))*100)
+```
+
+# Calculating contamination threshold
+## First data frame
+
+First data frame containes data from the sequencing run from February 2017, which includes feeding trials of _Dikerogammarus villosus_. To calculate the contamination threshold we decided to account for all laboratory contaminations (e.g. Human DNA) in our `POSITIVE` samples.
+
+```{r threshold first frame, include=T}
+## Positive samples from `feb.clean` (August 2017)
+grep("POS", colnames(feb.clean))
+
+feb.pos = feb.clean[colnames(feb.clean) == "POSITIVE.3"]
+feb.pos[,]/colSums(feb.pos)
+rownames(feb.pos)
+
+feb.pre.filter = as.data.frame(t(feb.clean))
+feb.pre.filter = feb.pre.filter[,]/rowSums(feb.pre.filter)
+feb.pre.filter[is.na(feb.pre.filter)] <- 0
+
+thres =  0.001
+```
+
+We have to exclude the contamination from _Dikerogammarus villosus_ as that would be too high for a fixed contamination threshold and we would lose any informations about prey-predator interactions. The remaining contaminations appear to be: _Asellus aquaticus_ (0.098%), and _Homo sapiens_ (0.13%). Based on the levels of these contaminations we decided to apply a threshold of 0.1% despite this will maintain some levels of contamination from Human DNA.
+
+```{r filter first frame, include=T}
+feb.post.filter = as.data.frame(feb.pre.filter)
+feb.post.filter[][feb.post.filter <= thres] <- 0
+
+feb.clean = as.data.frame(t(feb.clean))
+feb.clean[][feb.clean[,]/rowSums(feb.clean) <= thres] <- 0
+
+## Writing pre- and post-filter data to output
+write.csv(feb.clean, "R_outputs/DvFeb_cleaned_reads.csv")
+write.csv(feb.pre.filter, "R_outputs/DvFeb_pre-filter.csv")
+write.csv(feb.post.filter, "R_outputs/DvFeb_post-filter.csv")
+```
+
+We add now information regarding sampling sites (extracted from the samples names), use of blocking primers or not, pre- or post-filter, and the sample type (gut contents or community)
+
+```{r adding variables first frame, include=F}
+feb.pre = as.data.frame(feb.pre.filter)
+feb.post = as.data.frame(feb.post.filter)
+
+feb.pre$type = "pre.filter"
+feb.post$type = "post.filter"
+
+feb.clean$sample_id = rownames(feb.clean)
+feb.pre$sample_id = rownames(feb.clean)
+feb.post$sample_id = rownames(feb.clean)
+
+feb.clean$sample_type = "feeding-trial"
+feb.pre$sample_type = "feeding-trial"
+feb.post$sample_type = "feeding-trial"
+```
+
+## Second data frame
+
+Contamination from _Dikerogammarus villosus_ stands at 0.04%, _Gammarus zaddachi_ at 0.02%, and _Homo sapiens_ at 0.026%. Based on the levels of these contaminations we decided to apply a threshold of 0.03% despite this will maintain some levels of contamination from _D. villosus_ DNA.
+
+```{r threshold first frame, include=T}
+## Positive samples from `feb.clean` (August 2017)
+aug.clean[,grep("POS", colnames(aug.clean))]
+
+aug.pos = aug.clean[,grep("POS", colnames(aug.clean))]
+aug.pos = subset(aug.pos, subset=rowSums(aug.pos) > 0)
+
+aug.pos = aug.pos[,!c(colnames(aug.pos) == "POSITIVE.3")]
+aug.pos[,]/colSums(aug.pos)
+
+rownames(aug.pos)
+
+aug.pre.filter = as.data.frame(t(aug.clean))
+aug.pre.filter = aug.pre.filter[,]/rowSums(aug.pre.filter)
+aug.pre.filter[is.na(aug.pre.filter)] <- 0
+
+thres =  0.0003
+```
+
+We have to exclude the contamination from _Dikerogammarus villosus_ as that would be too high for a fixed contamination threshold and we would lose any informations about prey-predator interactions. The remaining contaminations appear to be: _Asellus aquaticus_ (0.098%), and _Homo sapiens_ (0.13%). Based on the levels of these contaminations we decided to apply a threshold of 0.1% despite this will maintain some levels of contamination from Human DNA.
+
+```{r filter first frame, include=T}
+aug.post.filter = as.data.frame(aug.pre.filter)
+aug.post.filter[][aug.post.filter <= thres] <- 0
+
+aug.clean = as.data.frame(t(aug.clean))
+aug.clean[][aug.clean[,]/rowSums(aug.clean) <= thres] <- 0
+
+
+## Writing pre- and post-filter data to output
+write.csv(aug.clean, "R/DvAug_cleaned_reads.csv")
+write.csv(aug.pre.filter, "R/DvAug_pre-filter.csv")
+write.csv(aug.post.filter, "R/DvAug_post-filter.csv")
+```
+
+We add now information regarding sampling sites (extracted from the samples names), use of blocking primers or not, pre- or post-filter, and the sample type (gut contents or community)
+
+```{r adding variables first frame, include=F}
+aug.pre = as.data.frame(aug.pre.filter)
+aug.post = as.data.frame(aug.post.filter)
+
+aug.pre$type = "pre.filter"
+aug.post$type = "post.filter"
+
+aug.clean$sample_id = rownames(aug.clean)
+aug.pre$sample_id = rownames(aug.pre)
+aug.post$sample_id = rownames(aug.post)
+
+aug.clean$sample_type = "NA"
+aug.clean[grep("e", aug.clean$sample_id), "sample_type"] = "water"
+aug.clean[grep("e", aug.clean$sample_id, invert=T), "sample_type"] = "gut"
+aug.clean[grep("DvG", aug.clean$sample_id), "sample_type"] = "feeding-trial"
+
+aug.pre$sample_type = "NA"
+aug.pre[grep("e", aug.pre$sample_id), "sample_type"] = "water"
+aug.pre[grep("e", aug.pre$sample_id, invert=T), "sample_type"] = "gut"
+aug.pre[grep("DvG", aug.pre$sample_id), "sample_type"] = "feeding-trial"
+
+aug.post$sample_type = "NA"
+aug.post[grep("e", aug.post$sample_id), "sample_type"] = "water"
+aug.post[grep("e", aug.post$sample_id, invert=T), "sample_type"] = "gut"
+aug.post[grep("DvG", aug.post$sample_id), "sample_type"] = "feeding-trial"
+```
+
+# 2. Feeding trials
+## Detection of preys in feeding trials
+
+
+```{r setting up pcr and trial replicates}
+dvd = feb.clean[grep("DvD", rownames(feb.clean)),]
+dva = feb.clean[grep("DvA", rownames(feb.clean)),]
+dvc = aug.clean[grep("DvG", rownames(aug.clean)),]
+
+# Feeding trials with Daphnia
+
+#removing pcr and sample replicate numbers
+dvd$sample_id = gsub("[.][0-9]{1}$", "", gsub("[.][0-9]{1}$", "", dvd$sample_id))
+
+#setting pcr and sample repliate numbers in separate columns
+dvd$trial_repl = "NA"
+dvd[grep("C", rownames(dvd)), "trial_repl"] = "control"
+dvd[grep("DvD[0-9]{1,2}[.]1[.]{0,1}[0-9]{0,1}", rownames(dvd)), "trial_repl"] = 1
+dvd[grep("DvD[0-9]{1,2}[.]2[.]{0,1}[0-9]{0,1}", rownames(dvd)), "trial_repl"] = 2
+dvd[grep("DvD[0-9]{1,2}[.]3[.]{0,1}[0-9]{0,1}", rownames(dvd)), "trial_repl"] = 3
+dvd[grep("DvD[0-9]{1,2}[.]4[.]{0,1}[0-9]{0,1}", rownames(dvd)), "trial_repl"] = 4
+dvd[grep("DvD[0-9]{1,2}[.]5[.]{0,1}[0-9]{0,1}", rownames(dvd)), "trial_repl"] = 5
+
+dvd$pcr_repl = "NA"
+dvd[grep("DvD[0-9]{1,2}[.][0-9]{1}[.]{0}[0-9]{0}", rownames(dvd)), "pcr_repl"] = 1
+dvd[grep("DvD[0-9]{1,2}[.][0-9]{1}[.]{1}1", rownames(dvd)), "pcr_repl"] = 2
+dvd[grep("DvD[0-9]{1,2}[.][0-9]{1}[.]{1}2", rownames(dvd)), "pcr_repl"] = 3
+dvd[grep("DvD[0-9]{1,2}[.][0-9]{1}[.]{1}3", rownames(dvd)), "pcr_repl"] = 4
+# for the control replicates
+dvd[grep("DvD[0-9]{1,2}C[.]{0}[0-9]{0}", rownames(dvd)), "pcr_repl"] = 1
+dvd[grep("DvD[0-9]{1,2}C[.]{1}1", rownames(dvd)), "pcr_repl"] = 2
+dvd[grep("DvD[0-9]{1,2}C[.]{1}2", rownames(dvd)), "pcr_repl"] = 3
+dvd[grep("DvD[0-9]{1,2}C[.]{1}3", rownames(dvd)), "pcr_repl"] = 4
+
+# Feeding trials with Asellus
+#removing pcr and sample replicate numbers
+dva$sample_id = gsub("[.][0-9]{1}$", "", gsub("[.][0-9]{1}$", "", dva$sample_id))
+
+#setting pcr and sample repliate numbers in separate columns
+dva$trial_repl = "NA"
+dva[grep("C", rownames(dva)), "trial_repl"] = "control"
+dva[grep("DvA[0-9]{1,2}[.]1[.]{0,1}[0-9]{0,1}", rownames(dva)), "trial_repl"] = 1
+dva[grep("DvA[0-9]{1,2}[.]2[.]{0,1}[0-9]{0,1}", rownames(dva)), "trial_repl"] = 2
+dva[grep("DvA[0-9]{1,2}[.]3[.]{0,1}[0-9]{0,1}", rownames(dva)), "trial_repl"] = 3
+dva[grep("DvA[0-9]{1,2}[.]4[.]{0,1}[0-9]{0,1}", rownames(dva)), "trial_repl"] = 4
+dva[grep("DvA[0-9]{1,2}[.]5[.]{0,1}[0-9]{0,1}", rownames(dva)), "trial_repl"] = 5
+
+dva$pcr_repl = "NA"
+dva[grep("DvA[0-9]{1,2}[.][0-9]{1}[.]{0}[0-9]{0}", rownames(dva)), "pcr_repl"] = 1
+dva[grep("DvA[0-9]{1,2}[.][0-9]{1}[.]{1}1", rownames(dva)), "pcr_repl"] = 2
+dva[grep("DvA[0-9]{1,2}[.][0-9]{1}[.]{1}2", rownames(dva)), "pcr_repl"] = 3
+dva[grep("DvA[0-9]{1,2}[.][0-9]{1}[.]{1}3", rownames(dva)), "pcr_repl"] = 4
+# for the control replicates
+dva[grep("DvA[0-9]{1,2}C[.]{0}[0-9]{0}", rownames(dva)), "pcr_repl"] = 1
+dva[grep("DvA[0-9]{1,2}C[.]{1}1", rownames(dva)), "pcr_repl"] = 2
+dva[grep("DvA[0-9]{1,2}C[.]{1}2", rownames(dva)), "pcr_repl"] = 3
+dva[grep("DvA[0-9]{1,2}C[.]{1}3", rownames(dva)), "pcr_repl"] = 4
+
+
+# Feeding trials with Crangonyx
+#removing pcr and sample replicate numbers
+dvc$sample_id = gsub("[.][0-9]{1}$", "", gsub("[.][0-9]{1}$", "", dvc$sample_id))
+
+#setting pcr and sample repliate numbers in separate columns
+dvc$trial_repl = "NA"
+dvc[grep("C", rownames(dvc)), "trial_repl"] = "control"
+dvc[grep("DvG[0-9]{1,2}[.]1[.]{0,1}[0-9]{0,1}", rownames(dvc)), "trial_repl"] = 1
+dvc[grep("DvG[0-9]{1,2}[.]2[.]{0,1}[0-9]{0,1}", rownames(dvc)), "trial_repl"] = 2
+dvc[grep("DvG[0-9]{1,2}[.]3[.]{0,1}[0-9]{0,1}", rownames(dvc)), "trial_repl"] = 3
+dvc[grep("DvG[0-9]{1,2}[.]4[.]{0,1}[0-9]{0,1}", rownames(dvc)), "trial_repl"] = 4
+dvc[grep("DvG[0-9]{1,2}[.]5[.]{0,1}[0-9]{0,1}", rownames(dvc)), "trial_repl"] = 5
+
+dvc$pcr_repl = 1
+```
+
+We checked the presence of any contamination in the feeding trials cleaned data, and we didn't carry over any contaminants after threshold. We can then keep only the main target species of the trials: _Daphnia_, _Asellus_ and _Crangonyx_.
+
+```{r removing unnecessary taxa}
+#colnames(dvd)
+#colSums(dvd[,c(1:6)])
+dvd = dvd[,!c(colnames(dvd) %in% c("Homo_sapiens","Osmia_bicornis","Asellus_aquaticus","Philodina_roseola"))]
+
+#colnames(dva)
+#colSums(dva[,c(1:6)])
+dva = dva[,!c(colnames(dva) %in% c("Homo_sapiens","Osmia_bicornis","Daphnia_magna","Philodina_roseola"))]
+
+#colnames(dvc)
+#colSums(dvc[,c(1:82)])
+dvc = dvc[,-c(1:16,18:29,31:82)]
+```
+
+```{r normalised DNA reads}
+dvd.norm = (dvd[,c(1:2)]/sum(feb.clean[,c(1:6)]))*1000000
+dva.norm = (dva[,c(1:2)]/sum(feb.clean[,c(1:6)]))*1000000
+dvc.norm = (dvc[,c(1:2)]/sum(aug.clean[,c(1:82)]))*1000000
+
+dvd.norm = cbind(dvd.norm, dvd[,c(3,5:6)])
+dva.norm = cbind(dva.norm, dva[,c(3,5:6)])
+dvc.norm = cbind(dvc.norm, dvc[,c(3,5:6)])
+```
+
+
+```{r plot for ggplot}
+daph.melt = melt(dvd.norm)
+asel.melt = melt(dva.norm)
+
+ggplot(daph.melt, aes(pcr_repl, value)) +
+  geom_boxplot(aes(fill=variable)) +
+  facet_grid(variable~., scales="free")
+
+ggplot(asel.melt, aes(pcr_repl, value)) +
+  geom_boxplot(aes(fill=variable)) +
+  facet_grid(variable~., scales="free")
+
+```
+
+```{r}
+t.test(rowSums(dvd.norm[dvd.norm$pcr_repl == "1",c(1:2)]), rowSums(dvd.norm[dvd.norm$pcr_repl == "2",c(1:2)]))
+t.test(rowSums(dvd.norm[dvd.norm$pcr_repl == "3",c(1:2)]), rowSums(dvd.norm[dvd.norm$pcr_repl == "4",c(1:2)]))
+t.test(rowSums(dvd.norm[dvd.norm$pcr_repl == "1",c(1:2)]), rowSums(dvd.norm[dvd.norm$pcr_repl == "4",c(1:2)]))
+t.test(rowSums(dvd.norm[dvd.norm$pcr_repl == "2",c(1:2)]), rowSums(dvd.norm[dvd.norm$pcr_repl == "3",c(1:2)]))
+t.test(rowSums(dvd.norm[dvd.norm$pcr_repl == "2",c(1:2)]), rowSums(dvd.norm[dvd.norm$pcr_repl == "4",c(1:2)]))
+```
+
+
+```{r sum of all pcr replicates}
+dvd.trials = as.data.frame(dvd.norm[,c(1:4)] %>% group_by(sample_id, trial_repl) %>% summarise_all(funs(sum)))
+dva.trials = as.data.frame(dva.norm[,c(1:4)] %>% group_by(sample_id, trial_repl) %>% summarise_all(funs(sum)))
+dvc.trials = dvc.norm[,c(1:4)]
+```
+
+```{r adding time info}
+dvd.trials$times = sub('^\\w{3}', "", dvd.trials$sample_id)
+dva.trials$times = sub('^\\w{3}', "", dva.trials$sample_id)
+dvc.trials$times = sub('^\\w{3}', "", dvc.trials$sample_id)
+
+dvc.trials$times = gsub("[.]","",dvc.trials$times)
+```
+
+
+```{r}
+dvd.melt = melt(dvd.trials)
+dva.melt = melt(dva.trials)
+dvc.melt = melt(dvc.trials)
+
+# We split the actual trial from the controls.
+dvd.contr = dvd.melt[grep("C", dvd.melt$sample_id),]
+dvd.melt = dvd.melt[grep("C", dvd.melt$sample_id, invert=T),]
+
+dva.contr = dva.melt[grep("C", dva.melt$sample_id),]
+dva.melt = dva.melt[grep("C", dva.melt$sample_id, invert=T),]
+
+dvc.contr = dvc.melt[grep("C", dvc.melt$sample_id),]
+dvc.melt = dvc.melt[grep("C", dvc.melt$sample_id, invert=T),]
+
+dvd.melt$times = factor(dvd.melt$times, levels = c("0","4","8","12","24","36"))
+dva.melt$times = factor(dva.melt$times, levels = c("0","4","8","12","24","36"))
+dvc.melt$times = factor(dvc.melt$times, levels = c("0","4","8","12","24","36"))
+
+dvc.melt$times[is.na(dvc.melt$times)] <- 12
+
+#dvd.melt[,"value"][dvd.melt$value > 0] <- 1
+#dva.melt[,"value"][dva.melt$value > 0] <- 1
+#dvc.melt[,"value"][dvc.melt$value > 0] <- 1
+
+#dvd.melt[which(dvd.melt[dvd.melt$variable == "Daphnia_magna","value"] > 0), c("sample_id", "trial_repl")]
+#dva.melt[which(dva.melt[dva.melt$variable == "Asellus_aquaticus","value"] > 0), c("sample_id", "trial_repl")]
+#dvc.melt[which(dvc.melt[dvc.melt$variable == "Crangonyx_pseudogracilis","value"] > 0), c("sample_id", "trial_repl")]
+```
+
+```{r}
+trail.melt = rbind(dvd.melt[dvd.melt$variable == "Daphnia_magna",], dva.melt[dva.melt$variable == "Asellus_aquaticus",])
+trail.melt = rbind(trail.melt, dvc.melt[dvc.melt$variable == "Crangonyx_pseudogracilis",])
+
+ggplot(trail.melt, aes(times, value)) +
+  geom_boxplot(outlier.shape=NA) + geom_point() +
+  facet_grid(variable~., scale="free") +
+  labs(x="Digestion time",y="Normalised DNA reads")
+
+
+
+#a <- ggplot(dvd.melt[dvd.melt$variable == "Daphnia_magna",], aes(times, value)) +
+#  geom_boxplot(outlier.shape=NA) + geom_point() +
+#  labs(x="",y="")
+
+#b <- ggplot(dva.melt[dva.melt$variable == "Asellus_aquaticus",], aes(times, value)) +
+#  geom_boxplot(outlier.shape=NA) + geom_point() +
+#  labs(x="",y="")
+
+#c <- ggplot(dvc.melt[dvc.melt$variable == "Crangonyx_pseudogracilis",], aes(times, value)) +
+#  geom_boxplot(outlier.shape=NA) + geom_point() +
+#  labs(x="",y="")
+
+#grid.arrange(a,b,c, nrow=3, left="Normalised DNA reads", bottom="Digestion time")
+```
+
+# 3. Prey detection in the wild
+## One season only across 3 lakes: Wroxham Broad, Grafham Water and Rockland Broad (control site).
+
+```{r}
+#head(aug.clean)
+ewb = aug.clean[grep("eWB", rownames(aug.clean)),]
+egw = aug.clean[grep("eGW", rownames(aug.clean)),]
+erb = aug.clean[grep("eRB", rownames(aug.clean)),]
+
+wb = aug.clean[grep("WB[.]", rownames(aug.clean)),]
+gw = aug.clean[grep("GW[.]", rownames(aug.clean)),]
+rb = aug.clean[grep("RB[.]", rownames(aug.clean)),]
+```
+
+```{r}
+wb = subset(wb[,1:82], select=colSums(wb[,1:82]) > 0)
+gw = subset(gw[,1:82], select=colSums(gw[,1:82]) > 0)
+rb = subset(rb[,1:82], select=colSums(rb[,1:82]) > 0)
+
+wb = wb[,!c(colnames(wb) %in% c("Homo_sapiens","Diptera"))]
+gw = gw[,!c(colnames(gw) %in% c("Homo_sapiens", "Diptera"))]
+rb = rb[,!c(colnames(rb) %in% c("Homo_sapiens", "Osmia_bicornis","Harmonia_axyridis"))]
+```
+# Considering the presence of _C. floridanus_ has not been confirmed for Rockland Broad, we decided to bring the taxonomic classification to genus for both species: _C. floridanus_ and _C. pseudogracilis_
+
+```{r}
+rb$Crangonyx = rb$Crangonyx_pseudogracilis + rb$Crangonyx_floridanus
+rb = rb[,!c(colnames(rb) %in% c("Crangonyx_pseudogracilis", "Crangonyx_floridanus"))]
+```
+
+```{r converting guts into proportions}
+wb.guts = wb[]/rowSums(wb)
+gw.guts = gw[]/rowSums(gw)
+rb.guts = rb[]/rowSums(rb)
+```
+
+```{r ANOSIM and PERMANOVA}
+wb.guts$site = "Wroxham Broad"
+gw.guts$site = "Grafham Water"
+rb.guts$site = "Rockland Broad"
+
+wb.guts$sample_id = rownames(wb.guts)
+gw.guts$sample_id = rownames(gw.guts)
+rb.guts$sample_id = rownames(rb.guts)
+```
+
+PERMANOVA analysis on the gut contents show a significant influence from all variables (season: p-value=9.999e-05; county: p-value=9.999e-05; both: p-value=2e-04). It worths mentioning though that the residual values for these samples are all high; so we can assume that the influence of the low number of samples positive for prey taxa could have skewed the results.
+
+
+```{r permanova guts reads, include=T, echo=F}
+#rownames(wb.guts)
+gut.full = full_join(wb.guts[,!c(colnames(wb.guts) %in% "Dikerogammarus_villosus")], gw.guts[,!c(colnames(gw.guts) %in% "Dikerogammarus_villosus")])
+gut.full = full_join(gut.full, rb.guts[,!c(colnames(rb.guts) %in% "Gammarus_zaddachi")])
+
+gut.full[is.na(gut.full)] <- 0
+
+matrix.ratio.guts = as.matrix(gut.full[,!c(colnames(gut.full) %in% c("site","sample_id"))])
+
+fact_site = matrix(c(gut.full$site),ncol=1)
+#fact_time.g = matrix(c(ratio.guts$time), ncol=1)
+#fact_all.g = matrix(c(ratio.guts$county, ratio.guts$time), ncol=2)
+
+dist.guts = vegdist(matrix.ratio.guts, method="euclidean")
+adonis(dist.guts~fact_site, permutations = 10000, method="euclid")
+```
+
+```{r metamds guts, include=F, echo=F}
+meta.guts = metaMDS(dist.guts, zerodist=ignore, trymax=500)
+```
+
+```{r permanova guts plot, include=T, echo=F}
+plot(meta.guts,type="n",
+main="gut contents PERMANOVA")
+points(meta.guts, select=which(fact_site[,1]=="Wroxham Broad"),col="black",pch=1)
+points(meta.guts, select=which(fact_site[,1]=="Grafham Water"),col="blue",pch=22)
+points(meta.guts, select=which(fact_site[,1]=="Rockland Broad"),col="red",pch=16)
+ordispider(meta.guts,group=fact_site[,1], col=c("black","blue","red"),label=F)
+ordiellipse(meta.guts,group=fact_site[,1],kind="ehull", lty=c(1,3,5),label=T,lwd=2)
+```
+
+From the rarefaction curves of both species Richness and Shannon diversity extrapolated from the gut contents analysis it appear that more individuals might need to be collected in order to increase the number of detections from the gut contents.
+
+```{r rarefaction curves on guts, include=T, echo=F}
+abund.guts = as.data.frame(gut.full)
+abund.guts[,1:15][abund.guts[,1:15] > 0] <- 1
+
+abund.guts = as.data.frame(abund.guts[,!c(colnames(abund.guts) %in% c("sample_id","sample_type","pcr","site"))] %>% group_by(time, county) %>% summarise_all(funs(sum)))
+
+raref.guts = t(abund.guts)
+colnames(raref.guts) = c("Oxfordshire May","Yorkshire May","Oxfordshire Oct","Yorkshire Oct")
+raref.guts = raref.guts[!c(rownames(raref.guts) %in% c("county","time")),]
+raref.guts = as.data.frame(raref.guts)
+
+raref.guts$`Oxfordshire May` = as.numeric(as.character(raref.guts$`Oxfordshire May`))
+raref.guts$`Yorkshire May` = as.numeric(as.character(raref.guts$`Yorkshire May`))
+raref.guts$`Oxfordshire Oct` = as.numeric(as.character(raref.guts$`Oxfordshire Oct`))
+raref.guts$`Yorkshire Oct` = as.numeric(as.character(raref.guts$`Yorkshire Oct`))
+
+raref.guts_inext = iNEXT(raref.guts, q=c(0,1), datatype = "abundance", se=T, endpoint=150)
+
+strip_lab=c("0"="Species Richness","1"="Shannon Diversity")
+ggiNEXT(raref.guts_inext) +
+  labs(y="", x="Number detections") +
+  theme(legend.position="bottom") +
+  facet_grid(order~., labeller=as_labeller(strip_lab), scales="free")
+```
+
+
+
+### OLD SCRIPT!!!!
+
+#####################################################
+## GETTING A LIST OF NEGATIVE AND POSITIVE SAMPLES ##
+## 		PLUS INFO ON THE TAXA THEY CONTAIN 	   ##
+#####################################################
+
+```{r}
+## NEGATIVE SAMPLES ##
+
+negs = grep("NEGATIVE", rownames(clean.samples))
+rowSums(clean.samples[negs,])
+for (a in clean.samples[negs,]){
+	taxa.negs = subset(clean.samples[negs,])
+}
+
+dim(taxa.negs)
+
+## POSITIVE SAMPLES ##
+
+pos = grep("POSITIVE", rownames(clean.samples))
+for (i in clean.samples[pos,]){
+	taxa.pos = subset(clean.samples[pos,])
+}
+
+dim(taxa.pos)
+
+## SETTING POSITIVE TAXA (Osmia bicornis) TO FREQUENCY = 0 ##
+
+rownames(taxa.pos)
+colSums(taxa.pos)
+taxa.pos[,"Osmia_bicornis"] <- 0 
+
+## FREQUENCING IN POSITIVE AND CALCULATING THE FILTER THRESHOLD WITH 
+
+colnames(taxa.pos)
+
+taxa.pos = taxa.pos/rowSums(taxa.pos)
+taxa.pos
+taxa.pos[is.na(taxa.pos)] <- 0
+pos.thre = apply(taxa.pos, 2, max)
+pos.n = c(names(taxa.pos))
+
+dim(pos.thre)
+str(pos.thre)
+```
+
+
+############################################
+## CALCULATING THE FREQUENCIES IN SAMPLES ##
+## 		PLUS APPLYING THRESHOLD 	##
+############################################
+
+```{r}
+freq.samples = data.frame(clean.samples/rowSums(clean.samples))
+str(freq.samples)
+freq.samples[is.na(freq.samples)] <- 0
+dim(freq.samples)
+dim(pos.thre)
+freq.samples["Threshold",] = pos.thre
+
+freq.samples = data.frame(t(freq.samples))
+freq.samples[,c(1:(ncol(freq.samples)-1))][freq.samples[c(1:(ncol(freq.samples)-1))] <= freq.samples[,ncol(freq.samples)]] <- 0
+```
+
+
+###################################################
+## CHECKING PRESENCE OF KNOWN CONTAMINATIONS AND ##
+## CALCULATING THRESHOLD IF STILL NEEDED         ##
+###################################################
+
+```{r}
+freq.samples=freq.samples[,!(colnames(freq.samples)%in% 'Threshold')]
+
+rowSums(freq.samples)
+
+freq.samples["Osmia_bicornis",]
+freq.samples["Homo_sapiens",]
+
+#freq.samples[,][freq.samples[] <= 0.00009] <- 0
+
+## CLEANING THE FRAME FROM EMPTY SAMPLES, REMOVING THRESHOLD AND ##
+## RE-TRANSPOSING THE FRAME ##
+
+rowSums(freq.samples)
+colSums(freq.samples)
+
+dim(freq.samples)
+freq.samples = subset(freq.samples, select = c(colSums(freq.samples) > 0))
+dim(freq.samples)
+freq.samples = subset(freq.samples, subset = c(rowSums(freq.samples) > 0))
+dim(freq.samples)
+
+colnames(freq.samples)
+
+freq.samples=t(freq.samples)
+
+## WRITING OUTPUT FILE AFTER THRESHOLD ##
+
+write.csv(freq.samples, "CO1Aug_seqreads_filtered.csv")
+```
+
+
+###############################################
+## DIVIDING eDNA SAMPLES FROM TISSUE SAMPLES ##
+###############################################
+######
+## I need to use the "e" and "invert=T" to grep the tissue samples 
+## as otherwise I won't be able to divide between the eDNA sample 
+## and the tissue samples
+######
+
+```{r}
+filter.samples=data.frame(freq.samples)
+rownames(filter.samples)
+
+tissue.samples = grep("e", rownames(filter.samples), invert=T, fixed=T)
+for (a in filter.samples[tissue.samples,]){
+	tissue.dna = subset(filter.samples[tissue.samples,])
+}
+
+tissue.dna = data.frame(tissue.dna)
+rownames(tissue.dna)
+colnames(tissue.dna)
+
+## CREATING ONE DATA FRAME PER SAMPLING LAKE ##
+
+gw.list = grep("GW", rownames(tissue.dna), fixed=T)
+for (t in tissue.dna[gw.list,]){
+	gw.samples = data.frame(subset(tissue.dna[gw.list,]))
+}
+wb.list = grep("WB", rownames(tissue.dna), fixed=T)
+for (t in tissue.dna[wb.list,]){
+	wb.samples = data.frame(subset(tissue.dna[wb.list,]))
+}
+
+dim(gw.samples)
+dim(wb.samples)
+```
+
+
+#####################################
+## CREATING FRAME FOR eDNA SAMPLES ##
+#####################################
+
+```{r}
+water.samples = grep("e", rownames(filter.samples), invert=F, fixed=T)
+for (a in filter.samples[water.samples,]){
+	water.dna = subset(filter.samples[water.samples,])
+}
+
+dim(water.dna)
+
+## REMOVING POS AND NEG SAMPLES ##
+
+rownames(tissue.dna)
+rownames(water.dna)
+
+discard.row = c('NEGATIVE', 'NEGATIVE.1', 'NEGATIVE.2', 'NEGATIVE.3', 'NEGATIVE.4', 
+'NEGATIVE.5', 'POSITIVE', 'POSITIVE.2', 'POSITIVE.3')
+
+dim(tissue.dna)
+tissue.dna = tissue.dna[!rownames(tissue.dna) %in% discard.row,]
+dim(tissue.dna)
+
+discard.water = c('eGW.BL', 'eWB.BL')
+
+dim(water.dna)
+water.dna = water.dna[!rownames(water.dna) %in% discard.water,]
+dim(water.dna)
+
+## CLEANING THE FRAMES FROM EMPTY SAMPLES ##
+
+dim(tissue.dna)
+tissue.dna = subset(tissue.dna, select = c(colSums(tissue.dna) > 0))
+dim(tissue.dna)
+tissue.dna = subset(tissue.dna, subset = c(rowSums(tissue.dna) > 0))
+dim(tissue.dna)
+
+dim(water.dna)
+water.dna = subset(water.dna, select = c(colSums(water.dna) > 0))
+dim(water.dna)
+water.dna = subset(water.dna, subset = c(rowSums(water.dna) > 0))
+dim(water.dna)
+
+## CLEANING TAXONOMY ##
+
+str(taxonomy.frame)
+dim(taxonomy.frame)
+
+for (t in as.data.frame(taxonomy.frame)){
+	n = gsub("\\['|\\']", "", t)
+	i = gsub("\\'", "", n)
+	taxa.split = data.frame(cbind(i))
+}
+
+dim(taxa.split)
+names(taxa.split)
+taxa.split
+taxa.split=data.frame(taxa.split)
+
+#orders = c('Anellida','Amphipoda', 'Diplostraca', 'Ephemeroptera', 'Hymenoptera',
+#'Isopoda', 'Cyclopoida', 'Calanoida', 'Podocopida', 'Diptera', 'Unionida', 
+#'Veneroida', 'Gastropoda', 'Chordata', 'Hydrozoa', 'Rotifera')
+
+dim(taxa.split)
+
+## WRITING OUTPUT FILE ##
+
+write.csv(tissue.dna, "CO1Aug_gutcontent_filtered.csv")
+write.csv(water.dna, "CO1Aug_water-samples_filtered.csv")
+write.csv(taxa.split, "CO1Aug_taxonomy.csv")
+```
+
+
+########################################
+## EXPLORATORY PLOTS FOR eDNA SAMPLES ##
+########################################
+
+```{r}
+#### SORTING TAXONOMY FILE TO INDIVIDUAL LISTS OF NAMES ####
+
+taxa = read.csv("CO1Aug_taxonomy.csv", header=T, row.names=1)
+
+head(taxa)
+str(taxa)
+
+for (i in taxa){
+  i = as.vector(i)
+  taxa.list = strsplit(i,", ")
+}
+
+clean.taxa=data.frame()
+sp.names=vector()
+gen.names=vector()
+fam.names=vector()
+ord.names=vector()
+for (l in taxa.list){
+  if (length(l) == 7){
+    sp.names=append(sp.names, gsub("\\^*s__", "", l[7]))
+    gen.names=append(gen.names, gsub("\\^*g__", "", l[6]))
+    fam.names=append(fam.names, gsub("\\^*f__", "", l[5]))
+    ord.names=append(ord.names, gsub("\\^*o__", "", l[4]))
+    clean.taxa=cbind("specie"=sp.names, "genus"=gen.names,"family"=fam.names, "order"=ord.names)
+  } else if (length(l) == 6) {
+    sp.names=append(sp.names, paste0(gsub("\\^*g__", "", l[6]),"_sp."))
+    gen.names=append(gen.names, gsub("\\^*g__", "", l[6]))
+    fam.names=append(fam.names, gsub("\\^*f__", "", l[5]))
+    ord.names=append(ord.names, gsub("\\^*o__", "", l[4]))
+    clean.taxa=cbind("specie"=sp.names, "genus"=gen.names,"family"=fam.names, "order"=ord.names)
+  } else if (length(l) == 5) {
+    sp.names=append(sp.names, paste0(gsub("\\^*f__", "", l[5])))
+    gen.names=append(gen.names, "gen.")
+    fam.names=append(fam.names, gsub("\\^*f__", "", l[5]))
+    ord.names=append(ord.names, gsub("\\^*o__", "", l[4]))
+    clean.taxa=cbind("specie"=sp.names, "genus"=gen.names,"family"=fam.names, "order"=ord.names)
+  } else if (length(l) == 4) {
+    sp.names = append(sp.names, paste0(gsub("\\^*o__", "", l[4])))
+    gen.names = append(gen.names, paste0(gsub("\\^*o__", "", l[4])))
+    fam.names = append(fam.names, paste0(gsub("\\^*o__", "", l[4])))
+    ord.names=append(ord.names, gsub("\\^*o__", "", l[4]))
+    clean.taxa=cbind("specie"=sp.names, "genus"=gen.names,"family"=fam.names, "order"=ord.names)
+  }
+}
+
+head(clean.taxa)
+tail(clean.taxa)
+
+write.csv(clean.taxa, "CO1Aug_clean_taxonomy.csv")
+
+## eDNA WATER SAMPLES ##
+
+water.ratio = read.csv("CO1Aug_water-samples_filtered.csv", header=T, row.names=1)
+clean.taxa = read.csv("CO1Aug_clean_taxonomy.csv", header=T, row.names=1)
+
+dim(water.ratio)
+head(water.ratio)
+dim(clean.taxa)
+head(clean.taxa)
+```
+
+
+## JOININING WATER SAMPLES WITH TAXONOMY ##
+######
+## removing the last character of each row name, alternatively use
+## water.ratio$samples = sub("\\..*","",rownames(water.ratio))
+######
+
+```{r}
+w.taxa=vector()
+for (c in names(water.ratio[,1:ncol(water.ratio)])){
+  w.ord=grep(c, clean.taxa$specie)
+  print(w.ord)
+  if (length(w.ord) > 1){
+    w.taxa=append(w.taxa,as.character(clean.taxa$family[min(w.ord)]))
+    print(c)
+  } else if (length(w.ord) == 1){
+    print(c)
+    w.taxa=append(w.taxa,as.character(clean.taxa$family[w.ord]))  
+  }
+}
+  
+length(w.taxa)
+length(names(water.ratio))
+
+## ADDING FAMILY TO FRAME AND RENAMING ##
+
+str(water.ratio)
+micro.sample=read.csv("coi-eDNA/microscopy-Katie.csv", header=T, row.names=1)
+
+water.taxa=data.frame(t(water.ratio))
+water.taxa = cbind(water.taxa, w.taxa)
+str(water.taxa)
+
+## MERGING SPECIES RATIO BY FAMILY ##
+
+length(water.taxa[,"w.taxa"])
+
+ident.taxa=unique(water.taxa[,"w.taxa"])
+length(ident.taxa)
+
+grep(ident.taxa, water.taxa[,"w.taxa"])
+
+str(water.taxa)
+test=data.frame()
+for (a in ident.taxa){
+  if(length(grep(a, water.taxa[,"w.taxa",]))>1){
+    b=grep(a, water.taxa[,"w.taxa"])
+    g=colSums(water.taxa[b,1:ncol(water.taxa)-1])
+    test=bind_rows(test,g)
+  } else if(length(grep(a, water.taxa[,"w.taxa"]))==1){
+    d=grep(a, water.taxa[,"w.taxa"])
+    test=bind_rows(test,water.taxa[d,1:ncol(water.taxa)-1])
+  }
+}
+
+rownames(test)=ident.taxa
+test$family=ident.taxa
+test
+
+str(test)
+
+names(test)=ordered(names(test), levels=c("eWB1","eWB2","eWB3","eWB4","eWB5","eWB6",
+                                                "eGW1","eGW2","eGW3","eGW4","eGW5","eGW6"))
+
+test = melt(test)
+names(test)
+names(test)[1]="family"
+
+g<-ggplot(test, aes(variable,value,fill=family))
+g<-g+geom_bar(stat="identity", position="fill", width=0.75)
+#g<-g+geom_boxplot()
+g<-g+theme_bw()#scale_fill_brewer(palette="Set1")
+g<-g+xlab("eDNA sampling sites") + 
+ylab("Filtered DNA reads ratios")
+g<-g+theme(axis.text = element_text(size=15)) + 
+theme(axis.title = element_text(size=15))
+g
+
+## SAVE IMAGE ##
+
+#ggsave("eDNA-coiAug-barplot.emf", width=8, height=10)
+```
+
+
+## TISSUE SAMPLES FOR THE TROPHIC WEB ##
+
+```{r}
+tissue = read.csv("CO1Aug_gutcontent_filtered.csv", header=T, row.names=1)
+head(tissue)
+
+colSums(tissue)
+rowSums(tissue)
+
+## CLEANING FROM EMPTY SAMPLES AND SPECIES ##
+
+dim(tissue)
+tissue = subset(tissue, select = c(colSums(tissue) > 0))
+dim(tissue)
+tissue = subset(tissue, subsett = c(rowSums(tissue) > 0))
+dim(tissue)
+
+## DIVIDING THE DATA FRAME BY LAKE ##
+
+tissue.plot = t(tissue)
+
+gw = grep("GW", colnames(tissue.plot), fixed=T)
+for (t in tissue.plot[,gw]){
+	tissue.gw = data.frame(subset(tissue.plot[,gw]))
+}
+dim(tissue.gw)
+
+wb = grep("WB", colnames(tissue.plot), fixed=T)
+for (t in tissue.plot[,wb]){
+	tissue.wb = data.frame(subset(tissue.plot[,wb]))
+}
+dim(tissue.wb)
+```
+
+
+## NEED TO CLEAN THE FRAMES FROM EMPTY CELLS ##
+######
+## Surely there's a loop that can be made, but for
+## now the manual version will do the job
+######
+
+```{r}
+rowSums(tissue.gw)
+rowSums(tissue.wb)
+
+dim(tissue.gw)
+tissue.gw = subset(tissue.gw, select=c(colSums(tissue.gw) > 0))
+dim(tissue.gw)
+tissue.gw = subset(tissue.gw, subset=c(rowSums(tissue.gw) > 0))
+dim(tissue.gw)
+
+dim(tissue.wb)
+tissue.wb = subset(tissue.wb, select=c(colSums(tissue.wb) > 0))
+dim(tissue.wb)
+tissue.wb = subset(tissue.wb, subset=c(rowSums(tissue.wb) > 0))
+dim(tissue.wb)
+
+rownames(tissue.gw)
+rownames(tissue.wb)
+tissue.wb=tissue.wb[!(rownames(tissue.wb)%in% "Anser_anser"),]
+```
+
+
+############################################################
+## CHANGING THE NAME OF SAMPLE BY ADDING NAME OF PREDATOR ##
+############################################################
+
+```{r}
+tissue.gw
+g = which(tissue.gw >= 0.9, arr.ind=T)
+rownames(g)
+g[,2]
+colnames(tissue.gw) = paste(rownames(g), colnames(tissue.gw[which(colnames(tissue.gw) == g[,2]),]), sep="_")
+tissue.gw
+
+tissue.wb
+w = which(tissue.wb >= 0.7, arr.ind=T)
+rownames(w)
+w[,2]
+colnames(tissue.wb) = paste(rownames(w), colnames(tissue.wb[which(colnames(tissue.wb) == w[,2]),]), sep="_")
+tissue.wb
+
+write.csv(tissue.gw, "coi-eDNA/tissue_gw.csv")
+write.csv(tissue.wb, "coi-eDNA/tissue_wb.csv")
+
+## SWAPPING ALL VALUES ABOVE 0 TO 1 ##
+
+tissue.wb[,][tissue.wb[,] > 0] <- 1
+tissue.gw[,][tissue.gw[,] > 0] <- 1
+```
+
+
+################################################
+## SETTING UP THE GW AND WB WEBS FRAMES USING ##
+## D. villosus GUT CONTENTS                   ##
+################################################
+
+```{r}
+colnames(tissue.wb)
+colnames(tissue.gw)
+
+wb.web = tissue.wb[!(rownames(tissue.wb)%in% "Dikerogammarus_villosus"),]
+gw.web = tissue.gw[!(rownames(tissue.gw)%in% "Dikerogammarus_villosus"),]
+
+wb.web$D_villosus_WB = rowSums(wb.web[,grep("Dikerogammarus_villosus", colnames(wb.web))])
+wb.web = subset(wb.web, select = c(colnames(wb.web)%in% 'D_villosus_WB'))
+
+gw.web$D_villosus_GW = rowSums(gw.web[,grep("Dikerogammarus_villosus", colnames(gw.web))])
+gw.web = subset(gw.web, select = c(colnames(gw.web)%in% 'D_villosus_GW'))
+```
+
+
+## LOADING eDNA AND KICK-SAMPLE DATA FOR ESTIMATING ABUNDANCES ##
+
+```{r}
+
+dir()
+dna.water = read.csv("CO1Aug_water-samples_filtered.csv", header=T, row.names=1)
+
+head(dna.water)
+## dna.water$samples = substr(rownames(dna.water), 2, 
+## nchar(rownames(dna.water))-1)
+
+dna.water = t(dna.water)
+
+## MAKING ALL VALUES > 0 EQUAL TO 1 PLUS ##
+## EXTRACTING 'GW' AND 'WB' SAMPLES FROM THE FRAME ##
+
+dna.water[1:nrow(dna.water),][dna.water[1:nrow(dna.water),] > 0] <- 1
+
+colnames(dna.water)
+
+gw.list = grep("GW", colnames(dna.water), fixed=T)
+for (t in dna.water[,gw.list]){
+	gw.water = data.frame(subset(dna.water[,gw.list]))
+}
+wb.list = grep("WB", colnames(dna.water), fixed=T)
+for (t in dna.water[,wb.list]){
+	wb.water = data.frame(subset(dna.water[,wb.list]))
+}
+```
+
+
+## IMPORTING MICROSCOPY DATA ##
+
+```{r}
+dir("coi-eDNA")
+#micros = read.csv("coi-eDNA/ID_gw-wb.csv", header=T)
+micros=read.csv("coi-eDNA/microscopy_gw-wb.csv", header=T, row.names=1)
+micros
+names(micros)
+str(micros)
+micros=data.frame(t(micros))
+
+#rownames(micros)= micros$BINOMIAL
+
+gwmic=micros[,grep("GW", colnames(micros))]
+wbmic=micros[,grep("WB", colnames(micros))]
+
+gwmic[1:nrow(gwmic),][gwmic[1:nrow(gwmic),] > 0] <- 1
+wbmic[1:nrow(wbmic),][wbmic[1:nrow(wbmic),] > 0] <- 1
+
+names(gwmic)
+names(wbmic)
+ncol(gwmic)
+ncol(wbmic)
+dim(gwmic)
+dim(wbmic)
+```
+
+
+## JOINING AND CALCULATING TOTAL OCCUPANCY (COMBINING eDNA and MICROSCOPY) ##
+
+```{r}
+rownames(gwmic)
+rownames(gw.water)
+dim(gw.water)
+dim(gw.web)
+gwmic
+gwmic$species = rownames(gwmic)
+gw.water$species = rownames(gw.water)
+
+gw.joined = full_join(gwmic, gw.water, by="species")
+gw.joined[is.na(gw.joined)] <- 0
+gw.joined
+
+sites = "GW1|GW2|GW3|GW4|GW5|GW6"
+gw.joined$GW_occup = (rowSums(gw.joined[,grep(sites, colnames(gw.joined))])/6)
+gw.joined
+
+names(wbmic)
+names(wb.water)
+wbmic
+wbmic$species = rownames(wbmic)
+wb.water$species = rownames(wb.water)
+
+wb.joined = full_join(wbmic, wb.water, by="species")
+wb.joined[is.na(wb.joined)] <- 0
+wb.joined
+
+sites = "WB1|WB2|WB3|WB4|WB5|WB6"
+wb.joined$WB_occup = (rowSums(wb.joined[,grep(sites, colnames(wb.joined))])/6)
+wb.joined
+```
+
+
+##################################
+## SETTING THE ESTIMATE VECTORS ##
+##################################
+
+```{r}
+gw.est = subset(gw.joined, select = c(colnames(gw.joined)%in% 'GW_occup'))
+wb.est = subset(wb.joined, select = c(colnames(wb.joined)%in% 'WB_occup'))
+
+gw.est
+wb.est
+
+gw.est = as.vector(gw.est[,1])
+names(gw.est) = c(gw.joined$species)
+names(gw.est)
+
+wb.est = as.vector(wb.est[,1])
+names(wb.est) = c(wb.joined$species)
+names(wb.est)
+```
+
+
+###############################################
+## PLOTTING THE WEBS WITH THE eDNA ESTIMATES ##
+###############################################
+
+```{r}
+#dev.new()
+#par(mfrow=c(1,2))
+
+str(wb.web)
+str(wb.est)
+
+write.csv(gw.web, "DV_foodwebs_2018/gw_web.csv")
+write.csv(gw.est, "DV_foodwebs_2018/gw_est.csv")
+          
+write.csv(wb.web, "DV_foodwebs_2018/wb_web.csv")
+write.csv(wb.est, "DV_foodwebs_2018/wb_est.csv")
+```
+
+
+
+```{r}
+## IMPROVING LABELS FOR PLOTS ##
+gw.web = read.csv("DV_foodwebs_2018/gw_web.csv", row.names = 1, header=T)
+gw.est = read.csv("DV_foodwebs_2018/gw_est.csv", row.names = 1, header=T)
+
+gw.est = as.vector(gw.est)
+gw.est = t(gw.est)
+names(gw.est) = colnames(gw.est)
+
+wb.web = read.csv("DV_foodwebs_2018/wb_web.csv", row.names = 1, header=T)
+wb.est = read.csv("DV_foodwebs_2018/wb_est.csv", row.names = 1, header=T)
+
+wb.est = as.vector(wb.est)
+wb.est = t(wb.est)
+names(wb.est) = colnames(wb.est)
+```
+
+
+```{r}
+## GW WEB
+plotweb(gw.web, text.rot=45, adj.high=0, adj.low=1, low.spacing = 0.02, 
+arrow="down.center", low.abun=gw.est, abuns.type="additional", labsize=1.2)
+title(main="Grafham Water")
+
+## WB WEB
+plotweb(wb.web, text.rot=45, adj.high=0, adj.low=1, low.spacing = 0.03, 
+arrow="down.center", low.abun=wb.est, abuns.type="additional", labsize=1.2)
+title(main="Wroxham Broad")
+```
+
+
+## WRITING LOG FILE FOR R VERSION AND SESSION INFO ##
+
+```{r}
+sink("log_bipartite-session.txt")
+sessionInfo()
+citation()
+sink()
+```
