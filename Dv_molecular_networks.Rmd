@@ -114,17 +114,30 @@ feb_reads = dv_feb
 
 ## Second frame
 aug_reads = dv_aug
-
-#[,-c(333:401)]
 ```
 
-```{r plot read depth, include=T, echo=FALSE}
-boxplot(colSums(feb_reads), colSums(aug_reads), ylab="N reads", xlab="Data frames", main = "Read depth of D.villosus samples", names=c("dv_feb\n(Feb2017)", "dv_aug\n(Aug2017)"), las=1, cex.axis=0.8)
+
+```{r intial read depth boxplot}
+feb_melt = melt(t(feb_reads))
+aug_melt = melt(t(aug_reads))
+
+feb_melt$library = "First"
+aug_melt$library = "Second"
+
+depth_melt = full_join(feb_melt, aug_melt)
+
+depth_melt = as.data.frame(depth_melt[,!c(colnames(depth_melt) %in% "Var2")] %>% group_by(Var1, library) %>% summarise_all(list(sum)))
+```
+
+```{r read depth boxplot}
+ggplot(depth_melt, aes(library, value)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha=0.4)
 ```
 
 ```{r mean read depth, include=F}
-feb_reads = subset(feb_reads, select=colSums(feb_reads) > 0)
-aug_reads = subset(aug_reads, select=colSums(aug_reads) > 0)
+#feb_reads = subset(feb_reads, select=colSums(feb_reads) > 0)
+#aug_reads = subset(aug_reads, select=colSums(aug_reads) > 0)
 
 ## Mean values
 mean(colSums(feb_reads))
@@ -151,22 +164,37 @@ To remove low coverage samples we decide to retain samples that contained N read
 cov_feb = mean(colSums(feb_reads))-sd(colSums(feb_reads))
 cov_aug = mean(colSums(aug_reads))-sd(colSums(aug_reads))
 
-feb_cover = subset(feb_reads, select = colSums(feb_reads) >= 2000)
+feb_cover = subset(feb_reads, select = colSums(feb_reads) >= cov_feb)
 aug_cover = subset(aug_reads, select = colSums(aug_reads) >= 2000)
 ```
 
 After this initial low coverage filter we retained 98.5%, and 99.5% of the total number of reads; and respectively 75%, and 75.2% number of samples.
 
-```{r reads survival boxplot, include=TRUE, echo=FALSE}
-boxplot(colSums(feb_cover), colSums(aug_cover), ylab="N reads", xlab="Data frames", main = "Read depth of D.villosus metabarcoding samples greater than mean-sd", names=c("feb_cover\n(Feb2017)", "aug_cover\n(Aug2017)"), las=1, cex.axis=0.8)
+```{r reads survival boxplot, include=T}
+feb_cmelt = melt(t(feb_cover))
+aug_cmelt = melt(t(aug_cover))
+
+feb_cmelt$library = "First"
+aug_cmelt$library = "Second"
+
+cover_melt = full_join(feb_cmelt, aug_cmelt)
+
+cover_melt = as.data.frame(cover_melt[,!c(colnames(cover_melt) %in% "Var2")] %>% group_by(Var1, library) %>% summarise_all(list(sum)))
+
+#boxplot(colSums(feb_cover), colSums(aug_cover), ylab="N reads", xlab="Data frames", main = "Read depth of D.villosus metabarcoding samples greater than mean-sd", names=c("feb_cover\n(Feb2017)", "aug_cover\n(Aug2017)"), las=1, cex.axis=0.8)
 ```
+
+```{r cover boxplot}
+ggplot(cover_melt, aes(library, value)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_jitter(alpha=0.4)
+```
+
+Read survival is set at 98.8% for the first library and 99.5% for the second.
 
 ```{r read survival percentage, include=T}
 (sum(feb_cover)/sum(feb_reads))*100
 (sum(aug_cover)/sum(aug_reads))*100
-
-(count(colSums(feb_cover) > 0)[2]/count(colSums(feb_reads) > 0)[2])*100
-(count(colSums(aug_cover) > 0)[2]/count(colSums(aug_reads) > 0)[2])*100
 ```
 
 # 3. Removal of untarget sample and taxa
@@ -183,50 +211,48 @@ feb_samples = feb_cover[,-c(grep("WB|GW|RB", colnames(feb_cover)))]
 aug_samples = aug_cover[,-c(grep("Ha|CH", colnames(aug_cover)))]
 ```
 
-The first data frame includes only feeding trials, therefore we need to keep few taxa that might be lab contaminants, specifically `Philodina_roseola`. The second data frame instead, contains few feeding trials samples plus the gut contents samples of wild `D. villosus` and wild `G. tigrinus`, and the eDNA samples. In this latter frame we then need to expand the list to explude the higher ranks.
+Before removing any unwanted taxa we subset both data frame to retain only taxa that have N reads greater than 0. The first data frame includes only feeding trials, therefore we need want to keep all taxa excluding algae, since those were used as food for the _D. villosus_ specimens. We keep potential taxa that might have been lab contaminants, specifically `Philodina_roseola`. The second data frame instead, contains few feeding trials samples plus the gut contents samples of wild `D. villosus` and wild `G. tigrinus`, and the eDNA samples. In this latter frame we then need to expand the list to explude the higher ranks.
 
 ```{r removing unwanted taxa}
 # First frame
 feb_samples = subset(feb_samples, subset = rowSums(feb_samples) > 0)
 #rownames(feb_samples)
+#rowSums(feb_samples)
 
-discard.feb = c("Hymenoptera","Thalassiosira_pseudonana","unassigned")
+discard.feb = c("Thalassiosira_pseudonana","unassigned")
 
-feb.clean = feb_samples[!rownames(feb_samples) %in% discard.feb,]
+feb_clean = feb_samples[!rownames(feb_samples) %in% discard.feb,]
 
 # Second frame
 aug_samples = subset(aug_samples, subset = rowSums(aug_samples) > 0)
 #rownames(aug_samples)
+#rowSums(aug_samples)
 
-discard.aug = c("Abramis_brama","Anser","Aphanomyces","Arthropoda_environmental_sample","Ascomorpha_ecaudis","Asplanchna_sieboldi","Brachionus","Brachionus_angularis","Brachionus_calyciflorus","Chromulinales","Chrysophyceae_sp.","Cochliopodium","Cochliopodium_actinophorum","Cochliopodium_sp._SG-2014","Cyclostephanos_dubius","Cyclostephanos_invisitatus","Cyclostephanos_sp._WTC16","Didymella_pinodes","Dinobryon","Dinobryon_divergens","Dinophyceae","Dissotrocha_macrostyla","Encyonema","Euchlanis_dilatata","Eukaryota","Fistulifera_solaris","Fusarium","Gomphonema_parvulum","Gymnocephalus","Hymenoptera","Ilyonectria_destructans","invertebrate_environmental_sample","Kellicottia_sp._BIOUG30062-G11","Keratella","Keratella_cochlearis","Keratella_quadrata","Lagenidium","Leptolegnia_sp._BOLD:AAX5717","Mallomonas_sp.","Melosira_ambiqua","Metazoa","Oncorhynchus_mykiss","Oomycetes","Paraphysomonas_sp.","Penicillium_sclerotiorum","Phytophthora","Ploima","Pseudorasbora_parva","Pythium","Pythium_marsipium","Saprolegnia_delica","Saprolegniaceae","Sellaphora_obesa","Skeletonema_potamos","Sordariomycetes","Stephanodiscus","Stephanodiscus_cf._minutulus","Tetracladium","Tetradesmus_obliquus","Thalassiosira_pseudonana","unassigned","Uncinais_uncinata","uncultured_Pythium","Urocentrum_turbo","Woloszynskia","Yamagishiella_unicocca","zooplankton_environmental_sample")
+discard.aug = c("Abramis_brama","Anser","Aphanomyces","Arthropoda_environmental_sample","Chromulinales","Chrysophyceae_sp.","Cochliopodium","Cochliopodium_actinophorum","Cochliopodium_sp._SG-2014","Cyclostephanos_dubius","Cyclostephanos_invisitatus","Cyclostephanos_sp._WTC16","Didymella_pinodes","Dinobryon","Dinobryon_divergens","Dinophyceae","Encyonema","Eukaryota","Fistulifera_solaris","Fusarium","Gomphonema_parvulum","Gymnocephalus","Ilyonectria_destructans","invertebrate_environmental_sample","Lagenidium","Leptolegnia_sp._BOLD:AAX5717","Mallomonas_sp.","Melosira_ambiqua","Metazoa","Oncorhynchus_mykiss","Oomycetes","Paraphysomonas_sp.","Penicillium_sclerotiorum","Phytophthora","Pseudorasbora_parva","Pythium","Pythium_marsipium","Saprolegnia_delica","Saprolegniaceae","Sellaphora_obesa","Skeletonema_potamos","Sordariomycetes","Stephanodiscus","Stephanodiscus_cf._minutulus","Tetracladium","Tetradesmus_obliquus","Thalassiosira_pseudonana","unassigned","uncultured_Pythium","Woloszynskia","Yamagishiella_unicocca","zooplankton_environmental_sample")
 
-aug.clean = aug_samples[!rownames(aug_samples) %in% discard.aug,]
+aug_clean = aug_samples[!rownames(aug_samples) %in% discard.aug,]
 ```
 
-We retained approx. 87.4%, and 76.3% of the initial N reads.
+We retained approx. 87.6%, and 53.9% of the initial N reads.
 
 ```{r retained reads and samples, include=T}
-(sum(feb.clean)/sum(feb_reads))*100
-(sum(aug.clean)/sum(aug_reads))*100
-
-((sum(feb_cover)/sum(feb_reads))*100-(sum(feb.clean)/sum(feb_reads))*100)
-((sum(aug_cover)/sum(aug_reads))*100-(sum(aug.clean)/sum(aug_reads))*100)
+(sum(feb_clean)/sum(feb_reads))*100
+(sum(aug_clean)/sum(aug_reads))*100
 ```
 
-# Calculating contamination threshold
-## First data frame
+# 4. Contamination QC
 
-First data frame containes data from the sequencing run from February 2017, which includes feeding trials of _Dikerogammarus villosus_. To calculate the contamination threshold we decided to account for all laboratory contaminations (e.g. Human DNA) in our `POSITIVE` samples.
+First data frame contains data from the sequencing run from February 2017, which includes feeding trials of _Dikerogammarus villosus_. To calculate the contamination threshold we decided to account for all laboratory contaminations (e.g. Human DNA) in our `POSITIVE` samples.
 
 ```{r threshold first frame, include=T}
-## Positive samples from `feb.clean` (August 2017)
-grep("POS", colnames(feb.clean))
+## Positive samples first frame
+grep("POS", colnames(feb_clean))
 
-feb.pos = feb.clean[colnames(feb.clean) == "POSITIVE.3"]
-feb.pos[,]/colSums(feb.pos)
-rownames(feb.pos)
+feb_pos = feb_clean[colnames(feb_clean) == "POSITIVE.3"]
+feb_pos[,]/colSums(feb_pos)
+rownames(feb_pos)
 
-feb.pre.filter = as.data.frame(t(feb.clean))
+feb.pre.filter = as.data.frame(t(feb_clean))
 feb.pre.filter = feb.pre.filter[,]/rowSums(feb.pre.filter)
 feb.pre.filter[is.na(feb.pre.filter)] <- 0
 
@@ -239,14 +265,53 @@ We have to exclude the contamination from _Dikerogammarus villosus_ as that woul
 feb.post.filter = as.data.frame(feb.pre.filter)
 feb.post.filter[][feb.post.filter <= thres] <- 0
 
-feb.clean = as.data.frame(t(feb.clean))
-feb.clean[][feb.clean[,]/rowSums(feb.clean) <= thres] <- 0
+feb_clean = as.data.frame(t(feb_clean))
+feb_clean[][feb_clean[,]/rowSums(feb_clean) <= thres] <- 0
 
 ## Writing pre- and post-filter data to output
-write.csv(feb.clean, "R_outputs/DvFeb_cleaned_reads.csv")
+write.csv(feb_clean, "R_outputs/DvFeb_cleaned_reads.csv")
 write.csv(feb.pre.filter, "R_outputs/DvFeb_pre-filter.csv")
 write.csv(feb.post.filter, "R_outputs/DvFeb_post-filter.csv")
 ```
+
+In the second data frame the contamination from _Dikerogammarus villosus_ stands at 0.047%, _Gammarus zaddachi_ at 0.05%, and _Homo sapiens_ at 0.02% and 0.01%. Based on the levels of these contaminations we decided to apply a threshold of 0.03% despite this will maintain some levels of contamination from _D. villosus_ DNA. Positive sample 3 failed in amplifying any _Osmia bicornis_ DNA and contains only _D. villosus_ DNA, so we have to exclude it from the QC.
+
+```{r threshold first frame, include=T}
+## Positive samples second frame
+aug_clean[,grep("POS", colnames(aug_clean))]
+
+aug.pos = aug_clean[,grep("POS", colnames(aug_clean))]
+aug.pos = subset(aug.pos, subset=rowSums(aug.pos) > 0)
+
+aug.pos = aug.pos[,!c(colnames(aug.pos) == "POSITIVE.3")]
+aug.pos[,]/colSums(aug.pos)
+
+rownames(aug.pos)
+
+aug.pre.filter = as.data.frame(t(aug_clean))
+aug.pre.filter = aug.pre.filter[,]/rowSums(aug.pre.filter)
+aug.pre.filter[is.na(aug.pre.filter)] <- 0
+
+thres =  0.0003
+```
+
+We have to exclude the contamination from _Dikerogammarus villosus_ as that would be too high for a fixed contamination threshold and we would lose any informations about prey-predator interactions. The remaining contaminations appear to be: _Asellus aquaticus_ (0.098%), and _Homo sapiens_ (0.13%). Based on the levels of these contaminations we decided to apply a threshold of 0.1% despite this will maintain some levels of contamination from Human DNA.
+
+```{r filter first frame, include=T}
+aug.post.filter = as.data.frame(aug.pre.filter)
+aug.post.filter[][aug.post.filter <= thres] <- 0
+
+aug_clean = as.data.frame(t(aug_clean))
+aug_clean[][aug_clean[,]/rowSums(aug_clean) <= thres] <- 0
+
+
+## Writing pre- and post-filter data to output
+write.csv(aug_clean, "R_outputs/DvAug_cleaned_reads.csv")
+write.csv(aug.pre.filter, "R_outputs/DvAug_pre-filter.csv")
+write.csv(aug.post.filter, "R_outputs/DvAug_post-filter.csv")
+```
+
+# 5. adding metadata
 
 We add now information regarding sampling sites (extracted from the samples names), use of blocking primers or not, pre- or post-filter, and the sample type (gut contents or community)
 
@@ -264,45 +329,6 @@ feb.post$sample_id = rownames(feb.clean)
 feb.clean$sample_type = "feeding-trial"
 feb.pre$sample_type = "feeding-trial"
 feb.post$sample_type = "feeding-trial"
-```
-
-## Second data frame
-
-Contamination from _Dikerogammarus villosus_ stands at 0.04%, _Gammarus zaddachi_ at 0.02%, and _Homo sapiens_ at 0.026%. Based on the levels of these contaminations we decided to apply a threshold of 0.03% despite this will maintain some levels of contamination from _D. villosus_ DNA.
-
-```{r threshold first frame, include=T}
-## Positive samples from `feb.clean` (August 2017)
-aug.clean[,grep("POS", colnames(aug.clean))]
-
-aug.pos = aug.clean[,grep("POS", colnames(aug.clean))]
-aug.pos = subset(aug.pos, subset=rowSums(aug.pos) > 0)
-
-aug.pos = aug.pos[,!c(colnames(aug.pos) == "POSITIVE.3")]
-aug.pos[,]/colSums(aug.pos)
-
-rownames(aug.pos)
-
-aug.pre.filter = as.data.frame(t(aug.clean))
-aug.pre.filter = aug.pre.filter[,]/rowSums(aug.pre.filter)
-aug.pre.filter[is.na(aug.pre.filter)] <- 0
-
-thres =  0.0003
-```
-
-We have to exclude the contamination from _Dikerogammarus villosus_ as that would be too high for a fixed contamination threshold and we would lose any informations about prey-predator interactions. The remaining contaminations appear to be: _Asellus aquaticus_ (0.098%), and _Homo sapiens_ (0.13%). Based on the levels of these contaminations we decided to apply a threshold of 0.1% despite this will maintain some levels of contamination from Human DNA.
-
-```{r filter first frame, include=T}
-aug.post.filter = as.data.frame(aug.pre.filter)
-aug.post.filter[][aug.post.filter <= thres] <- 0
-
-aug.clean = as.data.frame(t(aug.clean))
-aug.clean[][aug.clean[,]/rowSums(aug.clean) <= thres] <- 0
-
-
-## Writing pre- and post-filter data to output
-write.csv(aug.clean, "R/DvAug_cleaned_reads.csv")
-write.csv(aug.pre.filter, "R/DvAug_pre-filter.csv")
-write.csv(aug.post.filter, "R/DvAug_post-filter.csv")
 ```
 
 We add now information regarding sampling sites (extracted from the samples names), use of blocking primers or not, pre- or post-filter, and the sample type (gut contents or community)
