@@ -246,7 +246,7 @@ First data frame contains data from the sequencing run from February 2017, which
 
 ```{r threshold first frame, include=T}
 ## Positive samples first frame
-grep("POS", colnames(feb_clean))
+feb_clean[,grep("POS", colnames(feb_clean))]
 
 feb_pos = feb_clean[colnames(feb_clean) == "POSITIVE.3"]
 feb_pos[,]/colSums(feb_pos)
@@ -263,10 +263,15 @@ We have to exclude the contamination from _Dikerogammarus villosus_ as that woul
 
 ```{r filter first frame, include=T}
 feb.post.filter = as.data.frame(feb.pre.filter)
-feb.post.filter[][feb.post.filter <= thres] <- 0
+feb.post.filter[,][feb.post.filter <= thres] <- 0
 
 feb_clean = as.data.frame(t(feb_clean))
-feb_clean[][feb_clean[,]/rowSums(feb_clean) <= thres] <- 0
+feb_clean[,][feb_clean[,]/rowSums(feb_clean) <= thres] <- 0
+
+pn.feb = feb_clean[grep("POS|NEG", rownames(feb_clean)),]
+feb_clean = feb_clean[!c(rownames(feb_clean) %in% rownames(pn.feb)),]
+feb.pre.filter = feb.pre.filter[!c(rownames(feb.pre.filter) %in% rownames(pn.feb)),]
+feb.post.filter = feb.post.filter[!c(rownames(feb.post.filter) %in% rownames(pn.feb)),]
 
 ## Writing pre- and post-filter data to output
 write.csv(feb_clean, "R_outputs/DvFeb_cleaned_reads.csv")
@@ -280,13 +285,13 @@ In the second data frame the contamination from _Dikerogammarus villosus_ stands
 ## Positive samples second frame
 aug_clean[,grep("POS", colnames(aug_clean))]
 
-aug.pos = aug_clean[,grep("POS", colnames(aug_clean))]
-aug.pos = subset(aug.pos, subset=rowSums(aug.pos) > 0)
+aug_pos = aug_clean[,grep("POS", colnames(aug_clean))]
+aug_pos = subset(aug_pos, subset=rowSums(aug_pos) > 0)
 
-aug.pos = aug.pos[,!c(colnames(aug.pos) == "POSITIVE.3")]
-aug.pos[,]/colSums(aug.pos)
+aug_pos = aug_pos[,!c(colnames(aug_pos) == "POSITIVE.3")]
+aug_pos[,]/colSums(aug_pos)
 
-rownames(aug.pos)
+rownames(aug_pos)
 
 aug.pre.filter = as.data.frame(t(aug_clean))
 aug.pre.filter = aug.pre.filter[,]/rowSums(aug.pre.filter)
@@ -299,11 +304,15 @@ We have to exclude the contamination from _Dikerogammarus villosus_ as that woul
 
 ```{r filter first frame, include=T}
 aug.post.filter = as.data.frame(aug.pre.filter)
-aug.post.filter[][aug.post.filter <= thres] <- 0
+aug.post.filter[,][aug.post.filter <= thres] <- 0
 
 aug_clean = as.data.frame(t(aug_clean))
 aug_clean[][aug_clean[,]/rowSums(aug_clean) <= thres] <- 0
 
+pn.aug = aug_clean[grep("POS|NEG", rownames(aug_clean)),]
+aug_clean = aug_clean[!c(rownames(aug_clean) %in% rownames(pn.aug)),]
+aug.pre.filter = aug.pre.filter[!c(rownames(aug.pre.filter) %in% rownames(pn.aug)),]
+aug.post.filter = aug.post.filter[!c(rownames(aug.post.filter) %in% rownames(pn.aug)),]
 
 ## Writing pre- and post-filter data to output
 write.csv(aug_clean, "R_outputs/DvAug_cleaned_reads.csv")
@@ -311,7 +320,7 @@ write.csv(aug.pre.filter, "R_outputs/DvAug_pre-filter.csv")
 write.csv(aug.post.filter, "R_outputs/DvAug_post-filter.csv")
 ```
 
-# 5. adding metadata
+# 5. Adding metadata
 
 We add now information regarding sampling sites (extracted from the samples names), use of blocking primers or not, pre- or post-filter, and the sample type (gut contents or community)
 
@@ -557,7 +566,7 @@ edna = aug_clean[aug_clean$sample_type == "eDNA",]
 guts = aug_clean[aug_clean$sample_type == "gut contents",]
 ```
 
-Removing taxa that are equal to zero.
+Removing taxa that are equal to zero. We still have some contamination from PCR, labeles as `cont.17` till `cont.20`. Three of those contain _D.villosus_ DNA only (N=3244, N=38246, N=40021), while one containes _D.villosus_ (N=3304), _Osmia bicornis_ (N=867), Hymenoptera (N=5), _Homo sapiens_ (N=2), _Ephemera danica_ (N=2).
 
 ```{r removing empty taxa}
 edna.info = edna[,c(colnames(edna) %in% c("sample_id","sample_type"))]
@@ -566,13 +575,34 @@ guts.info = guts[,c(colnames(guts) %in% c("sample_id","sample_type"))]
 edna = subset(edna[,!c(colnames(edna) %in% c("sample_id","sample_type"))], select=colSums(edna[,!c(colnames(edna) %in% c("sample_id","sample_type"))]) > 0)
 guts = subset(guts[,!c(colnames(guts) %in% c("sample_id","sample_type"))], select=colSums(guts[,!c(colnames(guts) %in% c("sample_id","sample_type"))]) > 0)
 
-colnames(edna)
-colnames(guts)
+#colSums(edna)
+#colSums(guts)
 
-wb = wb[,!c(colnames(wb) %in% c("Homo_sapiens","Diptera"))]
-gw = gw[,!c(colnames(gw) %in% c("Homo_sapiens", "Diptera"))]
-rb = rb[,!c(colnames(rb) %in% c("Homo_sapiens", "Osmia_bicornis","Harmonia_axyridis"))]
+#rowSums(edna)
+#rowSums(guts)
+
+guts = cbind(guts.info, guts)
+edna = cbind(edna.info, edna)
 ```
+
+```{r}
+guts[c(rownames(guts) %in% c("cont.17","cont.18","cont.19","cont.20")),][guts[c(rownames(guts) %in% c("cont.17","cont.18","cont.19","cont.20")),] > 0]
+
+guts["cont.17",][guts["cont.17",] > 0]
+guts["cont.18",][guts["cont.18",] > 0]
+guts["cont.19",][guts["cont.19",] > 0]
+guts["cont.20",][guts["cont.20",] > 0]
+
+guts = guts[!c(rownames(guts) %in% c("cont.17","cont.18","cont.19","cont.20")),]
+```
+
+```{r removing positive taxa}
+guts = guts[,!c(colnames(guts) %in% c("Osmia_bicornis","Harmonia_axyridis","Homo_sapiens"))]
+
+
+```
+
+# NOTE: from here but need fixing in clean up!!!
 
 Considering the presence of _C. floridanus_ has not been confirmed for Rockland Broad, we decided to bring the taxonomic classification to genus for both species: _C. floridanus_ and _C. pseudogracilis_
 
