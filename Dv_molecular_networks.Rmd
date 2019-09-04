@@ -461,60 +461,61 @@ colSums(dvc[,!c(colnames(dvc) %in% c("sample_id","sample_type","trial_repl","pcr
 dvc = dvc[,!c(colnames(dvc) %in% "Homo_sapiens")]
 ```
 
-Because we have samples from different libraries we need to normalise the DNA reads
-
-#NOTE: from here!!!
+Because we obtained the results from two separate sequencing libraries we need to normalise the DNA reads.
 
 ```{r normalised DNA reads}
-dvd.norm = (dvd[,c(1:2)]/sum(feb.clean[,c(1:6)]))*1000000
-dva.norm = (dva[,c(1:2)]/sum(feb.clean[,c(1:6)]))*1000000
-dvc.norm = (dvc[,c(1:2)]/sum(aug.clean[,c(1:82)]))*1000000
+dvd.info = dvd[,c("sample_id","sample_type","trial_repl","pcr_repl")]
+dva.info = dva[,c("sample_id","sample_type","trial_repl","pcr_repl")]
+dvc.info = dvc[,c("sample_id","sample_type","trial_repl","pcr_repl")]
 
-dvd.norm = cbind(dvd.norm, dvd[,c(3,5:6)])
-dva.norm = cbind(dva.norm, dva[,c(3,5:6)])
-dvc.norm = cbind(dvc.norm, dvc[,c(3,5:6)])
+dvd.norm = (dvd[,!c(colnames(dvd) %in% c("sample_id","sample_type","trial_repl","pcr_repl"))]/sum(feb_clean[,!c(colnames(feb_clean) %in% c("sample_id","sample_type"))]))*1000000
+
+dva.norm = (dva[,!c(colnames(dva) %in% c("sample_id","sample_type","trial_repl","pcr_repl"))]/sum(feb_clean[,!c(colnames(feb_clean) %in% c("sample_id","sample_type"))]))*1000000
+
+dvc.norm = (dvc[,!c(colnames(dva) %in% c("sample_id","sample_type","trial_repl","pcr_repl"))]/sum(aug_clean[,!c(colnames(aug_clean) %in% c("sample_id","sample_type"))]))*1000000
+
+dvd.norm = cbind(dvd.norm, dvd.info)
+dva.norm = cbind(dva.norm, dva.info)
+dvc.norm = cbind(dvc.norm, dvc.info)
+```
+
+Once we sorted the frames out we need to sum the sequences based on the pcr replicates. This need to be performed only for DvD and DvA trials
+
+```{r summing pcr replicates}
+dvd.trials = as.data.frame(dvd.norm[,!c(colnames(dvd.norm) %in% "pcr_repl")] %>% group_by(sample_id, sample_type, trial_repl) %>% summarise_all(list(sum)))
+
+dva.trials = as.data.frame(dva.norm[,!c(colnames(dva.norm) %in% "pcr_repl")] %>% group_by(sample_id, sample_type, trial_repl) %>% summarise_all(list(sum)))
+
+dvc.trials = dvc.norm[,!c(colnames(dvc.norm) %in% "pcr_repl")]
 ```
 
 
 ```{r plot for ggplot}
-daph.melt = melt(dvd.norm)
-asel.melt = melt(dva.norm)
+daph.melt = melt(dvd.trials)
+asel.melt = melt(dva.trials)
+cran.melt = melt(dvc.trials)
 
-ggplot(daph.melt, aes(pcr_repl, value)) +
+ggplot(daph.melt, aes(trial_repl, value)) +
   geom_boxplot(aes(fill=variable)) +
   facet_grid(variable~., scales="free")
 
-ggplot(asel.melt, aes(pcr_repl, value)) +
+ggplot(asel.melt, aes(trial_repl, value)) +
   geom_boxplot(aes(fill=variable)) +
   facet_grid(variable~., scales="free")
 
-```
-
-```{r}
-t.test(rowSums(dvd.norm[dvd.norm$pcr_repl == "1",c(1:2)]), rowSums(dvd.norm[dvd.norm$pcr_repl == "2",c(1:2)]))
-t.test(rowSums(dvd.norm[dvd.norm$pcr_repl == "3",c(1:2)]), rowSums(dvd.norm[dvd.norm$pcr_repl == "4",c(1:2)]))
-t.test(rowSums(dvd.norm[dvd.norm$pcr_repl == "1",c(1:2)]), rowSums(dvd.norm[dvd.norm$pcr_repl == "4",c(1:2)]))
-t.test(rowSums(dvd.norm[dvd.norm$pcr_repl == "2",c(1:2)]), rowSums(dvd.norm[dvd.norm$pcr_repl == "3",c(1:2)]))
-t.test(rowSums(dvd.norm[dvd.norm$pcr_repl == "2",c(1:2)]), rowSums(dvd.norm[dvd.norm$pcr_repl == "4",c(1:2)]))
-```
-
-
-```{r sum of all pcr replicates}
-dvd.trials = as.data.frame(dvd.norm[,c(1:4)] %>% group_by(sample_id, trial_repl) %>% summarise_all(funs(sum)))
-dva.trials = as.data.frame(dva.norm[,c(1:4)] %>% group_by(sample_id, trial_repl) %>% summarise_all(funs(sum)))
-dvc.trials = dvc.norm[,c(1:4)]
+ggplot(cran.melt, aes(trial_repl, value)) +
+  geom_boxplot(aes(fill=variable)) +
+  facet_grid(variable~., scales="free")
 ```
 
 ```{r adding time info}
 dvd.trials$times = sub('^\\w{3}', "", dvd.trials$sample_id)
 dva.trials$times = sub('^\\w{3}', "", dva.trials$sample_id)
-dvc.trials$times = sub('^\\w{3}', "", dvc.trials$sample_id)
-
-dvc.trials$times = gsub("[.]","",dvc.trials$times)
+dvc.trials$times = sub("[.]", "", sub('^\\w{3}', "", dvc.trials$sample_id))
 ```
 
 
-```{r}
+```{r setting up feeding trials}
 dvd.melt = melt(dvd.trials)
 dva.melt = melt(dva.trials)
 dvc.melt = melt(dvc.trials)
@@ -532,63 +533,41 @@ dvc.melt = dvc.melt[grep("C", dvc.melt$sample_id, invert=T),]
 dvd.melt$times = factor(dvd.melt$times, levels = c("0","4","8","12","24","36"))
 dva.melt$times = factor(dva.melt$times, levels = c("0","4","8","12","24","36"))
 dvc.melt$times = factor(dvc.melt$times, levels = c("0","4","8","12","24","36"))
-
 dvc.melt$times[is.na(dvc.melt$times)] <- 12
-
-#dvd.melt[,"value"][dvd.melt$value > 0] <- 1
-#dva.melt[,"value"][dva.melt$value > 0] <- 1
-#dvc.melt[,"value"][dvc.melt$value > 0] <- 1
-
-#dvd.melt[which(dvd.melt[dvd.melt$variable == "Daphnia_magna","value"] > 0), c("sample_id", "trial_repl")]
-#dva.melt[which(dva.melt[dva.melt$variable == "Asellus_aquaticus","value"] > 0), c("sample_id", "trial_repl")]
-#dvc.melt[which(dvc.melt[dvc.melt$variable == "Crangonyx_pseudogracilis","value"] > 0), c("sample_id", "trial_repl")]
 ```
 
-```{r}
-trail.melt = rbind(dvd.melt[dvd.melt$variable == "Daphnia_magna",], dva.melt[dva.melt$variable == "Asellus_aquaticus",])
-trail.melt = rbind(trail.melt, dvc.melt[dvc.melt$variable == "Crangonyx_pseudogracilis",])
+```{r plotting feeding trials}
+trials.melt = full_join(dvd.melt, dva.melt)
+trials.melt = full_join(trials.melt, dvc.melt)
 
-ggplot(trail.melt, aes(times, value)) +
-  geom_boxplot(outlier.shape=NA) + geom_point() +
+ggplot(trials.melt[trials.melt$variable != "Dikerogammarus_villosus",], aes(times, value)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_jitter(alpha = 0.4) +
   facet_grid(variable~., scale="free") +
+  theme_bw() +
   labs(x="Digestion time",y="Normalised DNA reads")
-
-
-
-#a <- ggplot(dvd.melt[dvd.melt$variable == "Daphnia_magna",], aes(times, value)) +
-#  geom_boxplot(outlier.shape=NA) + geom_point() +
-#  labs(x="",y="")
-
-#b <- ggplot(dva.melt[dva.melt$variable == "Asellus_aquaticus",], aes(times, value)) +
-#  geom_boxplot(outlier.shape=NA) + geom_point() +
-#  labs(x="",y="")
-
-#c <- ggplot(dvc.melt[dvc.melt$variable == "Crangonyx_pseudogracilis",], aes(times, value)) +
-#  geom_boxplot(outlier.shape=NA) + geom_point() +
-#  labs(x="",y="")
-
-#grid.arrange(a,b,c, nrow=3, left="Normalised DNA reads", bottom="Digestion time")
 ```
 
 # 7. Prey detections in gut contents
 
 One season only across 3 lakes: Wroxham Broad, Grafham Water and Rockland Broad (control site).
 
-```{r}
-#head(aug.clean)
-ewb = aug.clean[grep("eWB", rownames(aug.clean)),]
-egw = aug.clean[grep("eGW", rownames(aug.clean)),]
-erb = aug.clean[grep("eRB", rownames(aug.clean)),]
-
-wb = aug.clean[grep("WB[.]", rownames(aug.clean)),]
-gw = aug.clean[grep("GW[.]", rownames(aug.clean)),]
-rb = aug.clean[grep("RB[.]", rownames(aug.clean)),]
+```{r lakes and gut contents}
+edna = aug_clean[aug_clean$sample_type == "eDNA",]
+guts = aug_clean[aug_clean$sample_type == "gut contents",]
 ```
 
-```{r}
-wb = subset(wb[,1:82], select=colSums(wb[,1:82]) > 0)
-gw = subset(gw[,1:82], select=colSums(gw[,1:82]) > 0)
-rb = subset(rb[,1:82], select=colSums(rb[,1:82]) > 0)
+Removing taxa that are equal to zero.
+
+```{r removing empty taxa}
+edna.info = edna[,c(colnames(edna) %in% c("sample_id","sample_type"))]
+guts.info = guts[,c(colnames(guts) %in% c("sample_id","sample_type"))]
+
+edna = subset(edna[,!c(colnames(edna) %in% c("sample_id","sample_type"))], select=colSums(edna[,!c(colnames(edna) %in% c("sample_id","sample_type"))]) > 0)
+guts = subset(guts[,!c(colnames(guts) %in% c("sample_id","sample_type"))], select=colSums(guts[,!c(colnames(guts) %in% c("sample_id","sample_type"))]) > 0)
+
+colnames(edna)
+colnames(guts)
 
 wb = wb[,!c(colnames(wb) %in% c("Homo_sapiens","Diptera"))]
 gw = gw[,!c(colnames(gw) %in% c("Homo_sapiens", "Diptera"))]
@@ -679,7 +658,24 @@ ggiNEXT(raref.guts_inext) +
   facet_grid(order~., labeller=as_labeller(strip_lab), scales="free")
 ```
 
+```{r log session info}
+sink("log_session_analysis.txt")
+sessionInfo()
+citation()
+sink()
+```
 
+```{r packages citation}
+sink("packages_citations.txt")
+for (p in pack.list){
+ print(citation(p))
+}
+sink()
+```
+
+```{r end}
+print("end")
+```
 
 ### OLD SCRIPT!!!!
 
@@ -1321,14 +1317,4 @@ title(main="Grafham Water")
 plotweb(wb.web, text.rot=45, adj.high=0, adj.low=1, low.spacing = 0.03, 
 arrow="down.center", low.abun=wb.est, abuns.type="additional", labsize=1.2)
 title(main="Wroxham Broad")
-```
-
-
-## WRITING LOG FILE FOR R VERSION AND SESSION INFO ##
-
-```{r}
-sink("log_bipartite-session.txt")
-sessionInfo()
-citation()
-sink()
 ```
