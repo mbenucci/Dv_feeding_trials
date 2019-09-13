@@ -737,6 +737,8 @@ colnames(abund.edna)
 abund.edna[,!c(colnames(abund.edna) %in% c("sample_id","sample_type","site","lake"))][abund.edna[,!c(colnames(abund.edna) %in% c("sample_id","sample_type","site","lake"))] > 0] <- 1
 ```
 
+# FROM HERE! Need to add rarefaction curves and NMDS for eDNA plus kick samples analysis.
+
 ```{r edna rarefaction curves}
 raref.edna = as.data.frame(abund.edna[,!c(colnames(abund.edna) %in% c("sample_id","sample_type"))] %>% group_by(site,lake) %>% summarise_all(list(sum)))
 
