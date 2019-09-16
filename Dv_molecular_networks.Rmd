@@ -729,6 +729,7 @@ edna$lake = NA
 edna[grep("GW", edna$site),"lake"] = "Grafham Water"
 edna[grep("WB", edna$site),"lake"] = "Wroxham Broad"
 edna[grep("RB", edna$site),"lake"] = "Rockland Broad"
+edna$lake
 ```
 
 ```{r abundance edna}
@@ -737,7 +738,7 @@ colnames(abund.edna)
 abund.edna[,!c(colnames(abund.edna) %in% c("sample_id","sample_type","site","lake"))][abund.edna[,!c(colnames(abund.edna) %in% c("sample_id","sample_type","site","lake"))] > 0] <- 1
 ```
 
-# FROM HERE! Need to add rarefaction curves and NMDS for eDNA plus kick samples analysis.
+Rerefaction curves eDNA samples.
 
 ```{r edna rarefaction curves}
 raref.edna = as.data.frame(abund.edna[,!c(colnames(abund.edna) %in% c("sample_id","sample_type"))] %>% group_by(site,lake) %>% summarise_all(list(sum)))
@@ -747,7 +748,7 @@ colnames(raref.edna)
 
 raref.edna = t(raref.edna[,!c(colnames(raref.edna) %in% c("lake","site"))])
 
-raref.edna_inext = iNEXT(raref.edna, q=c(0,1), datatype = "abundance", se=T, endpoint=150)
+raref.edna_inext = iNEXT(raref.edna, q=c(0,1), datatype = "abundance", se=T, endpoint=50)
 
 strip_lab=c("0"="Species Richness","1"="Shannon Diversity")
 
@@ -758,6 +759,37 @@ ggiNEXT(raref.edna_inext) +
   facet_grid(order~., labeller=as_labeller(strip_lab), scales="free")
 dev.off()
 ```
+
+PERMANOVA analysis on the eDNA samples
+
+```{r permanova guts reads, include=T, echo=F}
+adonis.edna = as.data.frame(abund.edna)
+
+fact_esite = matrix(c(adonis.edna$site),ncol=1)
+fact_elake = matrix(c(adonis.edna$lake),ncol=1)
+
+adonis.edna = adonis.edna[,!c(colnames(adonis.edna) %in% c("sample_id","sample_type","site","lake"))]
+
+dist.edna = vegdist(adonis.edna)
+adonis(dist.edna~fact_esite*fact_elake, permutations = 9999, method="jaccard")
+```
+
+```{r metamds guts, include=F, echo=F}
+meta.edna = metaMDS(dist.edna, distance="jaccard", trymax=200)
+```
+
+```{r permanova guts plot, include=T, echo=F}
+png("R_images/NMDS_edna_samples.png", width=4000, height=4000, units="px", res=300)
+plot(meta.edna,type="n", xlim=c(-0.5,0.5), ylim=c(-0.5,0.5))
+points(meta.edna, select=which(fact_elake[,1]=="Wroxham Broad"), col="black",pch=19)
+points(meta.edna, select=which(fact_elake[,1]=="Grafham Water"), col="blue",pch=15)
+points(meta.edna, select=which(fact_elake[,1]=="Rockland Broad"), col="red",pch=17)
+ordispider(meta.edna,group=fact_elake[,1], col=c("blue","orange","black"),label=T)
+ordiellipse(meta.edna,group=fact_elake[,1],kind="ehull", lty=c(1,3,5),label=F,lwd=2)
+text(-0.5,-1.1,label=paste("Stress:", round(meta.edna$stress, 6)))
+dev.off()
+```
+
 
 
 # Log files
