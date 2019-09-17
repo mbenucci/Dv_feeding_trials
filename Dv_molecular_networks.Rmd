@@ -846,6 +846,8 @@ abund.kick = full_join(abund.kick, rb.kick)
 abund.kick[is.na(abund.kick)] <- 0
 
 colnames(abund.kick)[colnames(abund.kick) == "LOCATION"] <- "site"
+
+abund.kick$site =  abund.kick$sample_id
 ```
 
 ```{r rarefaction curves on kick-samples}
@@ -883,23 +885,24 @@ Calculating PERMANOVA of kick-samples
 ```{r PERMANOVA of kick-samples}
 occup.kick = as.data.frame(abund.kick[,!c(colnames(abund.kick) %in% c("REPLICATE"))] %>% group_by(site,sample_id,sample_type,lake) %>% summarise_all(list(sum)))
 
-rownames(occup.kick) = paste(occup.kick$sample_id, occup.kick$time, sep="_")
+rownames(occup.kick) = occup.kick$site
+
+occup.kick[,!c(colnames(occup.kick) %in% c("sample_id","site","sample_type","lake"))][occup.kick[,!c(colnames(occup.kick) %in% c("sample_id","site","sample_type","lake"))] > 0] <- 1
 
 adonis.kick = as.data.frame(occup.kick)
-adonis.kick[,!c(colnames(adonis.kick) %in% c("sample_id","site","sample_type","lake"))][adonis.kick[,!c(colnames(adonis.kick) %in% c("sample_id","site","sample_type","lake"))] > 0] <- 1
 
-fact_site.kick = matrix(c(adonis.kick$sample_id), ncol=1)
+fact_site.kick = matrix(c(adonis.kick$site), ncol=1)
 fact_lake.kick = matrix(c(adonis.kick$lake), ncol=1)
 
 adonis.kick = adonis.kick[,!c(colnames(adonis.kick) %in% c("sample_id","site","sample_type","lake"))]
 
-adonis.kick = vegdist(as.matrix(adonis.kick))
+dist.kick = vegdist(as.matrix(adonis.kick))
 
-adonis(adonis.kick~fact_lake.kick*fact_site.kick, permutations = 9999, method="jaccard")
+adonis(dist.kick~fact_lake.kick*fact_site.kick, permutations = 9999, method="jaccard")
 ```
 
 ```{r}
-meta.kick = metaMDS(adonis.kick, trymax=200, distance="jaccard")
+meta.kick = metaMDS(dist.kick, trymax=200, distance="jaccard")
 ```
 
 ```{r NMDS plot of kick-samples}
@@ -948,8 +951,6 @@ richness.full = full_join(richness.edna, richness.kick)
 ```{r making metadata consistent}
 richness.full[richness.full$sample_type == "kick", "site"] = richness.full[richness.full$sample_type == "kick", "sample_id"]
 ```
-
-# NOTE TO SOLVE NA in SPECIES RICHNESS PLOT
 
 ```{r richness boxplots}
 png("R_images/species_richness_community_boxplot.png", width=3000, height=3000, units="px", res=300)
@@ -1013,8 +1014,79 @@ mean(rb_kickrich)
 sd(rb_kickrich)/sqrt(length(rb_kickrich))
 ```
 
-# 9. Bipartite network
+# 9. Community vs eDNA
 
+```{r PERMANOVA kick vs eDNA}
+abund.edna.kick = full_join(abund.edna, occup.kick)
+
+fact_edki.type = matrix(c(abund.edna.kick$sample_type), ncol=1)
+fact_edki.site = matrix(c(abund.edna.kick$site), ncol=1)
+fact_edki.lake = matrix(c(abund.edna.kick$lake), ncol=1)
+
+colnames(abund.edna.kick)
+
+adonis.edna.kick = as.data.frame(abund.edna.kick[,!c(colnames(abund.edna.kick) %in% c("sample_type","sample_id","lake","site"))])
+
+dist.edna.kick = vegdist(adonis.edna.kick, method="jaccard")
+
+adonis(dist.edna.kick~fact_edki.lake*fact_edki.site*fact_edki.type, permutations=9999, method="jaccard")
+```
+
+```{r NMDS kick and eDNA}
+meta.edki = metaMDS(dist.edna.kick, zerodist=ignore, trymax=200)
+```
+
+```{r NMDS plot kick vs eDNA}
+png("R_images/NMDS_kick_edna.png", width=4000, height=4000, units="px", res=300)
+plot(meta.edki,type="n", xlim=c(-0.5,0.5), ylim=c(-0.5,0.5))
+points(meta.edki, select=which(fact_edki.lake[,1]=="WB"), col="black",pch=19)
+points(meta.edki, select=which(fact_edki.lake[,1]=="GW"), col="blue",pch=15)
+points(meta.edki, select=which(fact_edki.lake[,1]=="RB"), col="red",pch=17)
+ordispider(meta.edki,group=fact_edki.lake[,1], col=c("blue","orange","black"),label=T)
+ordiellipse(meta.edki,group=fact_edki.type[,1],kind="ehull", lty=c(1,5),label=F,lwd=2)
+text(-0.5,-1.1,label=paste("Stress:", round(meta.edki$stress, 6)))
+dev.off()
+```
+
+Then by adding the gut contents to the analysis
+
+```{r}
+abund.edna.kick.guts = full_join(abund.edna.kick, abund.guts)
+
+fact_full.type = matrix(c(abund.edna.kick.guts$sample_type), ncol=1)
+fact_full.site = matrix(c(abund.edna.kick.guts$site), ncol=1)
+fact_full.lake = matrix(c(abund.edna.kick.guts$lake), ncol=1)
+
+adonis.edna.kick.guts = as.data.frame(abund.edna.kick.guts[,!c(colnames(abund.edna.kick.guts) %in% c("sample_type","sample_id","lake","site", "predator_id"))])
+
+dist.full = vegdist(adonis.edna.kick.guts, method="euclidean")
+
+adonis(dist.full~fact_full.lake*fact_full.site*fact_full.type, permutations=9999, method="euclidean")
+```
+
+```{r}
+meta.full = metaMDS(dist.full, zerodist=ignore, trymax=200)
+```
+
+```{r}
+png("R_images/NMDS_kick_eDNA_guts.png", width=4000, height=4000, units="px", res=300)
+plot(meta.full,type="n")#, xlim=c(-0.5,0.5), ylim=c(-0.5,0.5))
+points(meta.full, select=which(fact_full.lake[,1]=="WB"), col="black",pch=19)
+points(meta.full, select=which(fact_full.lake[,1]=="GW"), col="blue",pch=15)
+points(meta.full, select=which(fact_full.lake[,1]=="RB"), col="red",pch=17)
+ordispider(meta.full,group=fact_full.lake[,1], col=c("blue","orange","black"),label=F)
+ordiellipse(meta.full,group=fact_full.type[,1],kind="ehull", lty=c(1,3,5),label=T,lwd=2)
+text(-0.5,-1.1,label=paste("Stress:", round(meta.full$stress, 6)))
+dev.off()
+```
+
+
+# 10. Bipartite network
+
+```{r setting up the bipartite}
+
+
+```
 
 
 
