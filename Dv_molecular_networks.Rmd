@@ -666,6 +666,8 @@ abund.guts[abund.guts$predator_id == "Dvil","Dikerogammarus_villosus"] = 0
 abund.guts[abund.guts$predator_id == "Gzad","Gammarus_zaddachi"] = 0
 abund.guts[abund.guts$predator_id == "Gtig","Gammarus_tigrinus"] = 0
 abund.guts[abund.guts$predator_id == "Cmultise","Corophium_multisetosum"] = 0
+
+abund.guts = abund.guts[,!c(colnames(abund.guts) %in% "Dikerogammarus_villosus")]
 ```
 
 ```{r rarefaction curves}
@@ -1074,7 +1076,7 @@ plot(meta.full,type="n")#, xlim=c(-0.5,0.5), ylim=c(-0.5,0.5))
 points(meta.full, select=which(fact_full.lake[,1]=="WB"), col="black",pch=19)
 points(meta.full, select=which(fact_full.lake[,1]=="GW"), col="blue",pch=15)
 points(meta.full, select=which(fact_full.lake[,1]=="RB"), col="red",pch=17)
-ordispider(meta.full,group=fact_full.lake[,1], col=c("blue","orange","black"),label=F)
+ordispider(meta.full,group=fact_full.lake[,1], col=c("blue","orange","black"),label=T)
 ordiellipse(meta.full,group=fact_full.type[,1],kind="ehull", lty=c(1,3,5),label=T,lwd=2)
 text(-0.5,-1.1,label=paste("Stress:", round(meta.full$stress, 6)))
 dev.off()
@@ -1084,11 +1086,70 @@ dev.off()
 # 10. Bipartite network
 
 ```{r setting up the bipartite}
+abund.guts = abund.guts[,!c(colnames(abund.guts) %in% "Diptera")]
 
+web.guts = as.data.frame(abund.guts[,!c(colnames(abund.guts) %in% c("sample_id","sample_type","site"))] %>% group_by(lake, predator_id) %>% summarise_all(list(sum)))
 
+rownames(web.guts) = paste(web.guts$predator_id, web.guts$lake)
+
+web.guts = web.guts[,!c(colnames(web.guts) %in% c("predator_id","lake"))]
+
+web.guts = web.guts[!c(rownames(web.guts) %in% c("Gtig GW","Cmultise RB")),]
+
+web.guts = t(web.guts)
+
+rownames(web.guts) = gsub("[a-z]{3,}_",".",rownames(web.guts))
 ```
 
+```{r plot order}
+seq.high=c("Dvil GW","Dvil WB","Gzad RB")
 
+seq.low=c("C.luridus","C.laricomalis","G.tigrinus","B.vejdovskyanum","C.brevilabris","Cricotopus","Cyclopidae","Daphnia","D.polymorpha","G.zaddachi","P.pediculus","A.sieboldi","C.diastrophus","C.sp._BOLD:AAI4299","C.multisetosum","C.floridanus","C.pseudogracilis","E.dilatata","Hydra","H.oligactis","L.phaeopa","R.auricularia","S.sthenum","S.lacustris")
+
+col.network=c("yellow","yellow","red","tan4","cyan3","yellow","cyan3","cyan3","darkorchid3","red","cyan3","darkgreen","tan4","yellow","red","red","red","darkgreen","darkcyan","darkcyan","khaki3","darkorchid3","grey48","tan4")
+```
+
+```{r legend order}
+name.multi=c("Cladocera","Amphipoda","Diptera","Hydrozoa","Mollusca","Oligochaeta","Platyhelminthes","Rotifera","Trichoptera")
+col.multi=c("cyan3","red","yellow","darkcyan","darkorchid3","tan4","grey48","darkgreen","khaki3")
+```
+
+After having set up the orders of taxa in top and bottom levels with their corresponding colours, the bipartite plot and the legend can be generated. The legend was generated separately due to limits in the plot dimensions, which if reduced would have made either the plot, or the legend non readable. The legend and the plot were merged externally to R.
+
+```{r plotting the networks}
+# Producing the bipartite network
+png("R_images/bipartite_network.png", width=4000, height=2500, units="px", res=300)
+plotweb(sortweb(web.guts, sort.order="seq", sequence=list(seq.higher=seq.high, seq.lower=seq.low)), method = "normal", y.width.low=0.1, y.width.high=0.08,	y.lim=c(0,3), labsize=2, low.lab.dis=0.05, high.lab.dis=0.1, low.spacing=0.012, high.spacing = 0.11, text.rot=90, col.high="black", col.low=col.network, high.y=2.5, low.y=1.5)
+# Producing the legend
+legend("bottom", legend=name.multi, fill=col.multi, border="black", bty="n", ncol=3, xpd=T, cex=1.7)
+dev.off()
+```
+
+# 11. Summary table
+
+```{r summary table}
+guts.summary = as.data.frame(abund.guts[,!c(colnames(abund.guts) %in% c("sample_id"))] %>% group_by(sample_type,lake,predator_id,site) %>% summarise_all(funs(sum)))
+edna.summary = as.data.frame(abund.edna[,!c(colnames(abund.edna) %in% c("sample_id"))] %>% group_by(sample_type,lake,site) %>% summarise_all(funs(sum)))
+kick.summary = as.data.frame(abund.kick[,!c(colnames(abund.kick) %in% c("sample_id","REPLICATE"))] %>% group_by(sample_type,lake,site) %>% summarise_all(funs(sum)))
+
+full.data = full_join(guts.summary, edna.summary)
+full.data = full_join(full.data, kick.summary)
+
+# Splitting the metadata from data, so that we can remove the NAs into the data set.
+full.info = full.data[,c(colnames(full.data) %in% c("sample_type","lake","predator_id","site"))]
+full.data = full.data[,!c(colnames(full.data) %in% c("sample_type","lake","predator_id","site"))]
+full.data[is.na(full.data)] <- 0
+
+# Binding the frame together using specific order of the metadata
+final.data = bind_cols(full.info, full.data)
+colnames(final.data) = gsub("_", " ", colnames(final.data))
+
+# Transposing and saving the data frame, we will rearrange the order of the metadata later
+final.data = t(final.data)
+
+#Saving final output
+write.csv(final.data, "R_outputs/Data_summary_table.csv")
+```
 
 # Log files
 
