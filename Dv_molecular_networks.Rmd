@@ -572,7 +572,7 @@ dev.off()
 
 # 6. Prey detections in gut contents
 
-One season only across 3 lakes: Wroxham Broad, Grafham Water and Rockland Broad (control site).
+One season across 3 lakes: Wroxham Broad, Grafham Water and Rockland Broad (control site).
 
 ```{r lakes and gut contents}
 edna = aug_clean[aug_clean$sample_type == "eDNA",]
@@ -639,6 +639,12 @@ guts$lake = NA
 guts[grep("WB", guts$site),"lake"] = "WB"
 guts[grep("GW", guts$site),"lake"] = "GW"
 guts[grep("RB", guts$site),"lake"] = "RB"
+
+guts[guts$predator_id == "Dvil","Dikerogammarus_villosus"] = 0
+guts[guts$predator_id == "Gzad","Gammarus_zaddachi"] = 0
+guts[guts$predator_id == "Gtig","Gammarus_tigrinus"] = 0
+guts[guts$predator_id == "Cmultise","Corophium_multisetosum"] = 0
+guts = guts[,!c(colnames(guts) %in% "Dikerogammarus_villosus")]
 ```
 
 From the rarefaction curves of both species Richness and Shannon diversity extrapolated from the gut contents analysis it appear that more individuals might need to be collected in order to increase the number of detections from the gut contents.
@@ -652,13 +658,6 @@ We need to remove the predators from gut contents
 
 ```{r removing predators from guts}
 unique(abund.guts$predator_id)
-
-abund.guts[abund.guts$predator_id == "Dvil","Dikerogammarus_villosus"] = 0
-abund.guts[abund.guts$predator_id == "Gzad","Gammarus_zaddachi"] = 0
-abund.guts[abund.guts$predator_id == "Gtig","Gammarus_tigrinus"] = 0
-abund.guts[abund.guts$predator_id == "Cmultise","Corophium_multisetosum"] = 0
-
-abund.guts = abund.guts[,!c(colnames(abund.guts) %in% "Dikerogammarus_villosus")]
 ```
 
 ```{r rarefaction curves}
@@ -758,18 +757,19 @@ dev.off()
 
 ```{r edna frame}
 edna$site = gsub("^e", "", rownames(edna))
-edna$site
 
 edna$lake = NA
 edna[grep("GW", edna$site),"lake"] = "GW"
 edna[grep("WB", edna$site),"lake"] = "WB"
 edna[grep("RB", edna$site),"lake"] = "RB"
-edna$lake
+
+# Unfortunately we need to remove D. villosus from eDNA dataset due to contamination.
+edna[,!c(colnames(edna) %in% "Dikerogammarus_villosus")]
 ```
 
 ```{r abundance edna}
 abund.edna = as.data.frame(edna)
-colnames(abund.edna)
+
 abund.edna[,!c(colnames(abund.edna) %in% c("sample_id","sample_type","site","lake"))][abund.edna[,!c(colnames(abund.edna) %in% c("sample_id","sample_type","site","lake"))] > 0] <- 1
 ```
 
@@ -883,6 +883,8 @@ abund.kick[is.na(abund.kick)] <- 0
 colnames(abund.kick)[colnames(abund.kick) == "LOCATION"] <- "site"
 
 abund.kick$site =  abund.kick$sample_id
+
+abund.kick = abund.kick[,!c(colnames(abund.kick) %in% "REPLICATE")]
 ```
 
 ```{r rarefaction curves on kick-samples}
@@ -890,7 +892,7 @@ abund.kick$site =  abund.kick$sample_id
 abund.kick = abund.kick[,!c(colnames(abund.kick) %in% c("Trichoptera","Diptera","Oligochaeta","Ostracoda","Araneae","Coleoptera","Mollusca","Zygoptera","Plecoptera","Nematoda"))]
 
 # removing extra variables
-raref.kick = abund.kick[,!c(colnames(abund.kick) %in% c("sample_id","REPLICATE","sample_type"))]
+raref.kick = abund.kick[,!c(colnames(abund.kick) %in% c("sample_id","sample_type"))]
 
 # list of families in data set to be removed
 kick.fam = colnames(raref.kick[,grepl("idae", colnames(raref.kick)) == T])
@@ -1118,9 +1120,9 @@ dev.off()
 # 11. Summary table
 
 ```{r summary table}
-guts.summary = as.data.frame(abund.guts[,!c(colnames(abund.guts) %in% c("sample_id"))] %>% group_by(sample_type,lake,predator_id,site) %>% summarise_all(funs(sum)))
-edna.summary = as.data.frame(abund.edna[,!c(colnames(abund.edna) %in% c("sample_id"))] %>% group_by(sample_type,lake,site) %>% summarise_all(funs(sum)))
-kick.summary = as.data.frame(abund.kick[,!c(colnames(abund.kick) %in% c("sample_id","REPLICATE"))] %>% group_by(sample_type,lake,site) %>% summarise_all(funs(sum)))
+guts.summary = as.data.frame(abund.guts[,!c(colnames(abund.guts) %in% c("sample_id"))] %>% group_by(sample_type,lake,predator_id,site) %>% summarise_all(list(sum)))
+edna.summary = as.data.frame(abund.edna[,!c(colnames(abund.edna) %in% c("sample_id"))] %>% group_by(sample_type,lake,site) %>% summarise_all(list(sum)))
+kick.summary = as.data.frame(abund.kick[,!c(colnames(abund.kick) %in% c("sample_id","REPLICATE"))] %>% group_by(sample_type,lake,site) %>% summarise_all(list(sum)))
 
 full.data = full_join(guts.summary, edna.summary)
 full.data = full_join(full.data, kick.summary)
@@ -1135,7 +1137,7 @@ final.data = bind_cols(full.info, full.data)
 colnames(final.data) = gsub("_", " ", colnames(final.data))
 
 # Transposing and saving the data frame, we will rearrange the order of the metadata later
-final.data = t(final.data)
+final.data = as.data.frame(t(final.data))
 
 #Saving final output
 write.csv(final.data, "R_outputs/Data_summary_table.csv")
@@ -1223,10 +1225,60 @@ text(3,0, label="eDNA", cex=2.5)
 text(-3,2.7, label="guts", cex=2.5)
 text(2,-3, label="kick", cex=2.5)
 
-
 # Common legend
 plot.new()
-legend("left", legend=c("Grafham Water","Wroxham Broad","Rockand Broad"), col=c("blue","black","red"), pch=c(15,19,17), cex=2, ncol=1)
+legend("left", legend=c("Grafham Water","Wroxham Broad","Rockland Broad"), col=c("blue","black","red"), pch=c(15,19,17), cex=2, ncol=1)
+dev.off()
+```
+
+```{r barplot summary}
+final.melt = full_join(guts, edna)
+final.melt = full_join(final.melt, abund.kick)
+
+final.melt = melt(final.melt)
+
+unique(final.melt$variable)
+
+final.melt$order = NA
+final.melt[grep("Corophium|Crangonyx|Gammarus|Dikerogammarus", final.melt$variable),"order"] = "Amphipoda"
+final.melt[grep("Bothrioneurum|Chaetogaster|Stylaria|Lumbricillus|Nais|Ophidonais|Uncinais|Tubificida", final.melt$variable),"order"] = "Annelida"
+final.melt[grep("Eudiaptomus|Eurytemora", final.melt$variable),"order"] = "Calanoida"
+final.melt[grep("Chaetonotus", final.melt$variable),"order"] = "Chaetonotida"
+final.melt[grep("Hydra", final.melt$variable),"order"] = "Cnidaria"
+final.melt[grep("Dytiscidae|Platambus|Haliplidae|Elmidae|Limnius", final.melt$variable),"order"] = "Coleoptera"
+final.melt[grep("Cyclopidae|Acanthocyclops|Cyclopoida|Cyclops|Eucyclops|Mesocyclops", final.melt$variable),"order"] = "Cyclopoida"
+final.melt[grep("Chydorus|Daphnia|Polyphemus|Chydoridae|Daphniidae|Diaphanosoma|Eubosmina|Macrothrix|Eurycercus", final.melt$variable),"order"] = "Diplostraca"
+final.melt[grep("Chironomus|Cricotopus|Chironomidae|Diptera|Polypedilum|Procladius|Tanytarsus|Dolichopodidae|Nematocera|Tipulidae|Brachycera|Ceratopogonidae", final.melt$variable),"order"] = "Diptera"
+final.melt[grep("Cloeon|Caenis", final.melt$variable),"order"] = "Ephemeroptera"
+final.melt[grep("Radix|Potamopyrgus|Stagnicola|Bithynia|Lymnaea|Lymnaeidae|Planorbis|Valvata|Bithyniidae|Theodoxus|Segmentina|Valvatidae", final.melt$variable),"order"] = "Gastropoda"
+final.melt[grep("Corixidae|Corixa|Micronecta|Notonecta|Velliidae|Plea|Nepa", final.melt$variable),"order"] = "Hemiptera"
+final.melt[grep("Helobdella|Glossiphonia|Placobdella", final.melt$variable),"order"] = "Hirudinida"
+final.melt[grep("Asellus", final.melt$variable),"order"] = "Isopoda"
+final.melt[grep("Plectus|Polyarthra", final.melt$variable),"order"] = "Nematoda"
+final.melt[grep("Erythromma|Coenagrionidae", final.melt$variable),"order"] = "Odonata"
+final.melt[grep("Cyprideis|Cypridopsis|Limnocythere", final.melt$variable),"order"] = "Ostracoda"
+final.melt[grep("Stenostomum", final.melt$variable),"order"] = "Platyhelminthes"
+final.melt[grep("Asplanchna|Euchlanis|Brachionus|Keratella|Philodina|Ploima|Synchaeta", final.melt$variable),"order"] = "Rotifera"
+final.melt[grep("Lype|Leptoceridae|Ecnomus|Oecetis|Ceraclea", final.melt$variable),"order"] = "Trichoptera"
+final.melt[grep("Limnesia", final.melt$variable),"order"] = "Trombidiformes"
+final.melt[grep("Unio", final.melt$variable),"order"] = "Unionida"
+final.melt[grep("Dreissena|Pisidium|Sphaerium", final.melt$variable),"order"] = "Veneroida"
+
+# 23 colours for the Orders
+cols_barplot = c("coral1", "chartreuse4","blue","cadetblue1","tan4","burlywood1","brown","blue4","yellow","aquamarine","deeppink","darkviolet","darkslategrey","darkseagreen","darkorchid1","darkorange","darkolivegreen","darkkhaki","red","cyan","grey50","black","steelblue")
+
+png("R_images/summary_barplot_2.png", height=4000, width=4000, units="px", res=300)
+final.melt %>% mutate(sample_type = factor(sample_type, levels=c("gut contents","eDNA","kick"))) %>% mutate(lake = factor(lake, levels=c("GW","WB","RB"))) %>%
+  ggplot(aes(sample_type, value)) +
+  geom_bar(stat="identity", position="fill", aes(fill=order)) +
+  scale_fill_manual(values = cols_barplot, name = "") +
+  scale_y_continuous(expand=c(0,0)) +
+  facet_grid(.~lake) +
+  labs(x="", y="composition (%)") +
+  guides(fill=guide_legend(ncol=1)) +
+  theme(legend.position="right", legend.direction ="vertical", axis.text = element_text(size = 15), 
+        strip.text = element_text(size=15), axis.title = element_text(size =15),
+        legend.text = element_text(size=15))
 dev.off()
 ```
 
