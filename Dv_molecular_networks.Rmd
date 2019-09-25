@@ -519,25 +519,12 @@ dvc.trials = dvc.norm[,!c(colnames(dvc.norm) %in% "pcr_repl")]
 ```
 
 
-```{r plot for ggplot}
+```{r setting the frames for plotting}
 daph.melt = melt(dvd.trials)
 asel.melt = melt(dva.trials)
 cran.melt = melt(dvc.trials)
 
-ggplot(daph.melt, aes(trial_repl, value)) +
-  geom_boxplot(aes(fill=variable)) +
-  facet_grid(variable~., scales="free")
-
-ggplot(asel.melt, aes(trial_repl, value)) +
-  geom_boxplot(aes(fill=variable)) +
-  facet_grid(variable~., scales="free")
-
-ggplot(cran.melt, aes(trial_repl, value)) +
-  geom_boxplot(aes(fill=variable)) +
-  facet_grid(variable~., scales="free")
-```
-
-```{r adding time info}
+# Adding the time information
 dvd.trials$times = sub('^\\w{3}', "", dvd.trials$sample_id)
 dva.trials$times = sub('^\\w{3}', "", dva.trials$sample_id)
 dvc.trials$times = sub("[.]", "", sub('^\\w{3}', "", dvc.trials$sample_id))
@@ -569,13 +556,17 @@ dvc.melt$times[is.na(dvc.melt$times)] <- 12
 trials.melt = full_join(dvd.melt, dva.melt)
 trials.melt = full_join(trials.melt, dvc.melt)
 
+trials.melt$variable = gsub("[a-z]{6,}_", ".", trials.melt$variable)
+
+str(trials.melt)
+
 png("R_images/feeding_trials_boxplot.png", width=5000, height=4000, units="px", res=300)
-ggplot(trials.melt[trials.melt$variable != "Dikerogammarus_villosus",], aes(times, value)) +
+ggplot(trials.melt[trials.melt$variable != "D.villosus",], aes(times, value)) +
   geom_boxplot(outlier.shape=NA) +
   geom_jitter(alpha = 0.4) +
   facet_grid(variable~., scale="free") +
   theme_bw() +
-  labs(x="Digestion time",y="Normalised DNA reads")
+  labs(x="Digestion time (hours)",y="Normalised DNA reads")
 dev.off()
 ```
 
@@ -690,7 +681,7 @@ ggiNEXT(raref.guts_inext) +
 dev.off()
 ```
 
-PERMANOVA analysis on the gut contents show a significant influence from all variables (season: p-value=9.999e-05; county: p-value=9.999e-05; both: p-value=2e-04). It worths mentioning though that the residual values for these samples are all high; so we can assume that the influence of the low number of samples positive for prey taxa could have skewed the results.
+PERMANOVA analysis on the gut contents show a significant influence from only one variable (site: p-value=1e-04). It worths mentioning though that the residual values for these samples are all high; so we can assume that the influence of the low number of samples positive for prey taxa could have skewed the results.
 
 ```{r permanova guts reads, include=T, echo=F}
 adonis.guts = as.data.frame(abund.guts[grep("Dvil|Gzad", abund.guts$predator_id),])
@@ -702,11 +693,11 @@ fact_pred = matrix(c(adonis.guts$predator_id),ncol=1)
 adonis.guts = adonis.guts[,!c(colnames(adonis.guts) %in% c("sample_id","sample_type","site","lake","predator_id"))]
 
 dist.guts = vegdist(adonis.guts, method="euclidean")
-adonis(dist.guts~fact_site*fact_pred*fact_lake, permutations = 9999, method="euclidean")
+adonis(dist.guts~fact_lake*fact_pred*fact_site, permutations=9999, method="euclidean")
 ```
 
 ```{r metamds guts, include=F, echo=F}
-meta.guts = metaMDS(dist.guts, zerodist=ignore, trymax=200)
+meta.guts = metaMDS(dist.guts, trymax=200, distance="euclidean")
 ```
 
 ```{r permanova guts plot, include=T, echo=F}
@@ -715,7 +706,7 @@ plot(meta.guts,type="n", xlim=c(-2,2), ylim=c(-1.5,1.5))
 points(meta.guts, select=which(fact_lake[,1]=="WB"), col="black",pch=19)
 points(meta.guts, select=which(fact_lake[,1]=="GW"), col="blue",pch=15)
 points(meta.guts, select=which(fact_lake[,1]=="RB"), col="red",pch=17)
-ordispider(meta.guts,group=fact_lake[,1], col=c("blue","orange","black"),label=F)
+ordispider(meta.guts,group=fact_lake[,1], col=c("blue","orange","black"),label=T)
 ordiellipse(meta.guts,group=fact_pred[,1],kind="ehull", lty=c(1,5),label=T,lwd=2)
 text(-0.5,-1.1,label=paste("Stress:", round(meta.guts$stress, 6)))
 dev.off()
@@ -763,7 +754,6 @@ legend("bottom", legend=name.multi, fill=col.multi, border="black", bty="n", nco
 dev.off()
 ```
 
-
 # 8. Community analysis
 
 ```{r edna frame}
@@ -810,13 +800,13 @@ PERMANOVA analysis on the eDNA samples
 ```{r permanova guts reads, include=T, echo=F}
 adonis.edna = as.data.frame(abund.edna)
 
-fact_esite = matrix(c(adonis.edna$site),ncol=1)
-fact_elake = matrix(c(adonis.edna$lake),ncol=1)
+fact_site.edna = matrix(c(adonis.edna$site),ncol=1)
+fact_lake.edna = matrix(c(adonis.edna$lake),ncol=1)
 
 adonis.edna = adonis.edna[,!c(colnames(adonis.edna) %in% c("sample_id","sample_type","site","lake"))]
 
 dist.edna = vegdist(adonis.edna)
-adonis(dist.edna~fact_esite*fact_elake, permutations = 9999, method="jaccard")
+adonis(dist.edna~fact_lake.edna*fact_site.edna, permutations = 9999, method="jaccard")
 ```
 
 ```{r metamds guts, include=F, echo=F}
@@ -826,11 +816,11 @@ meta.edna = metaMDS(dist.edna, distance="jaccard", trymax=200)
 ```{r permanova guts plot, include=T, echo=F}
 png("R_images/NMDS_edna_samples.png", width=4000, height=4000, units="px", res=300)
 plot(meta.edna,type="n", xlim=c(-0.5,0.5), ylim=c(-0.5,0.5))
-points(meta.edna, select=which(fact_elake[,1]=="WB"), col="black",pch=19)
-points(meta.edna, select=which(fact_elake[,1]=="GW"), col="blue",pch=15)
-points(meta.edna, select=which(fact_elake[,1]=="RB"), col="red",pch=17)
-ordispider(meta.edna,group=fact_elake[,1], col=c("blue","orange","black"),label=T)
-ordiellipse(meta.edna,group=fact_elake[,1],kind="ehull", lty=c(1,3,5),label=F,lwd=2)
+points(meta.edna, select=which(fact_lake.edna[,1]=="WB"), col="black",pch=19)
+points(meta.edna, select=which(fact_lake.edna[,1]=="GW"), col="blue",pch=15)
+points(meta.edna, select=which(fact_lake.edna[,1]=="RB"), col="red",pch=17)
+ordispider(meta.edna,group=fact_lake.edna[,1], col=c("blue","orange","black"),label=T)
+ordiellipse(meta.edna,group=fact_lake.edna[,1],kind="ehull", lty=c(1,3,5),label=F,lwd=2)
 text(-0.5,-1.1,label=paste("Stress:", round(meta.edna$stress, 6)))
 dev.off()
 ```
@@ -1059,14 +1049,14 @@ mean(rb_kickrich)
 sd(rb_kickrich)/sqrt(length(rb_kickrich))
 ```
 
-# 10. Community vs eDNA
+# 10. Community (eDNA and kick) vs gut contents
 
 ```{r PERMANOVA kick vs eDNA}
 abund.edna.kick = full_join(abund.edna, occup.kick)
 
-fact_edki.type = matrix(c(abund.edna.kick$sample_type), ncol=1)
-fact_edki.site = matrix(c(abund.edna.kick$site), ncol=1)
-fact_edki.lake = matrix(c(abund.edna.kick$lake), ncol=1)
+fact_type.edki = matrix(c(abund.edna.kick$sample_type), ncol=1)
+fact_site.edki = matrix(c(abund.edna.kick$site), ncol=1)
+fact_lake.edki = matrix(c(abund.edna.kick$lake), ncol=1)
 
 colnames(abund.edna.kick)
 
@@ -1074,7 +1064,7 @@ adonis.edna.kick = as.data.frame(abund.edna.kick[,!c(colnames(abund.edna.kick) %
 
 dist.edna.kick = vegdist(adonis.edna.kick, method="jaccard")
 
-adonis(dist.edna.kick~fact_edki.lake*fact_edki.site*fact_edki.type, permutations=9999, method="jaccard")
+adonis(dist.edna.kick~fact_lake.edki*fact_site.edki*fact_type.edki, permutations=9999, method="jaccard")
 ```
 
 ```{r NMDS kick and eDNA}
@@ -1084,11 +1074,11 @@ meta.edki = metaMDS(dist.edna.kick, zerodist=ignore, trymax=200)
 ```{r NMDS plot kick vs eDNA}
 png("R_images/NMDS_kick_edna.png", width=4000, height=4000, units="px", res=300)
 plot(meta.edki,type="n", xlim=c(-0.5,0.5), ylim=c(-0.5,0.5))
-points(meta.edki, select=which(fact_edki.lake[,1]=="WB"), col="black",pch=19)
-points(meta.edki, select=which(fact_edki.lake[,1]=="GW"), col="blue",pch=15)
-points(meta.edki, select=which(fact_edki.lake[,1]=="RB"), col="red",pch=17)
-ordispider(meta.edki,group=fact_edki.lake[,1], col=c("blue","orange","black"),label=T)
-ordiellipse(meta.edki,group=fact_edki.type[,1],kind="ehull", lty=c(1,5),label=F,lwd=2)
+points(meta.edki, select=which(fact_lake.edki[,1]=="WB"), col="black",pch=19)
+points(meta.edki, select=which(fact_lake.edki[,1]=="GW"), col="blue",pch=15)
+points(meta.edki, select=which(fact_lake.edki[,1]=="RB"), col="red",pch=17)
+ordispider(meta.edki,group=fact_lake.edki[,1], col=c("blue","orange","black"),label=T)
+ordiellipse(meta.edki,group=fact_type.edki[,1],kind="ehull", lty=c(1,5),label=F,lwd=2)
 text(-0.5,-1.1,label=paste("Stress:", round(meta.edki$stress, 6)))
 dev.off()
 ```
@@ -1098,29 +1088,29 @@ Then by adding the gut contents to the analysis
 ```{r}
 abund.edna.kick.guts = full_join(abund.edna.kick, abund.guts)
 
-fact_full.type = matrix(c(abund.edna.kick.guts$sample_type), ncol=1)
-fact_full.site = matrix(c(abund.edna.kick.guts$site), ncol=1)
-fact_full.lake = matrix(c(abund.edna.kick.guts$lake), ncol=1)
+fact_type.full = matrix(c(abund.edna.kick.guts$sample_type), ncol=1)
+fact_site.full = matrix(c(abund.edna.kick.guts$site), ncol=1)
+fact_lake.full = matrix(c(abund.edna.kick.guts$lake), ncol=1)
 
 adonis.edna.kick.guts = as.data.frame(abund.edna.kick.guts[,!c(colnames(abund.edna.kick.guts) %in% c("sample_type","sample_id","lake","site", "predator_id"))])
 
 dist.full = vegdist(adonis.edna.kick.guts, method="euclidean")
 
-adonis(dist.full~fact_full.lake*fact_full.site*fact_full.type, permutations=9999, method="euclidean")
+adonis(dist.full~fact_lake.full*fact_site.full*fact_type.full, permutations=9999, method="euclidean")
 ```
 
-```{r}
-meta.full = metaMDS(dist.full, zerodist=ignore, trymax=200)
+```{r PERMANOVA on eDNA, kick and guts}
+meta.full = metaMDS(dist.full, distance="jaccard", trymax=200)
 ```
 
 ```{r}
 png("R_images/NMDS_kick_eDNA_guts.png", width=4000, height=4000, units="px", res=300)
 plot(meta.full,type="n")#, xlim=c(-0.5,0.5), ylim=c(-0.5,0.5))
-points(meta.full, select=which(fact_full.lake[,1]=="WB"), col="black",pch=19)
-points(meta.full, select=which(fact_full.lake[,1]=="GW"), col="blue",pch=15)
-points(meta.full, select=which(fact_full.lake[,1]=="RB"), col="red",pch=17)
-ordispider(meta.full,group=fact_full.lake[,1], col=c("blue","orange","black"),label=T)
-ordiellipse(meta.full,group=fact_full.type[,1],kind="ehull", lty=c(1,3,5),label=T,lwd=2)
+points(meta.full, select=which(fact_lake.full[,1]=="WB"), col="black",pch=19)
+points(meta.full, select=which(fact_lake.full[,1]=="GW"), col="blue",pch=15)
+points(meta.full, select=which(fact_lake.full[,1]=="RB"), col="red",pch=17)
+ordispider(meta.full,group=fact_lake.full[,1], col=c("blue","orange","black"),label=T)
+ordiellipse(meta.full,group=fact_type.full[,1],kind="ehull", lty=c(1,3,5),label=T,lwd=2)
 text(-0.5,-1.1,label=paste("Stress:", round(meta.full$stress, 6)))
 dev.off()
 ```
@@ -1150,6 +1140,96 @@ final.data = t(final.data)
 #Saving final output
 write.csv(final.data, "R_outputs/Data_summary_table.csv")
 ```
+
+# 12. Publication plots
+
+```{r feeding trials publication}
+png("R_images/publication_feeding_trials.png", width=5000, height=4000, units="px", res=300)
+ggplot(trials.melt[trials.melt$variable != "D.villosus",], aes(times, value)) +
+  geom_boxplot(outlier.shape=NA, aes(size=6)) +
+  geom_jitter(alpha = 0.4, aes(size=10)) +
+  facet_grid(variable~., scale="free") +
+  theme_bw() +
+  labs(x="Digestion time (hours)",y="Normalised DNA reads") +
+  theme(legend.position = "none", axis.text = element_text(size = 15), 
+        strip.text = element_text(size=15), axis.title = element_text(size =15),
+        legend.text = element_text(size=15))
+dev.off()
+```
+
+```{r NMDS publication}
+png("R_images/publication_NMDS.png", width=5000, height=3000, units="px", res=300)
+lay.matrix = matrix(c(1,2,3,4,5,6), ncol=3, nrow=2, byrow=T)
+layout(lay.matrix, heights=c(1,1), widths=c(2,2,2))
+
+# a) gut contents only
+plot(meta.guts,type="n", xlim=c(-2,2), ylim=c(-1,1), cex.axis=2, cex.lab=1.5)
+ordispider(meta.guts,group=fact_lake[,1], col=c("blue","orange","black"),label=T, cex=2)
+points(meta.guts, select=which(fact_lake[,1]=="WB"), col="black",pch=19,cex=2)
+points(meta.guts, select=which(fact_lake[,1]=="GW"), col="blue",pch=15,cex=2)
+points(meta.guts, select=which(fact_lake[,1]=="RB"), col="red",pch=17,cex=2)
+ordiellipse(meta.guts,group=fact_pred[,1],kind="ehull", lty=c(1,5),label=F,lwd=1)
+text(1.5,-1.5, label=paste("Stress:", round(meta.guts$stress, 4)), cex=1.5)
+text(-1.9,1.45, label="a)", cex=3)
+text(0,1.45, label="guts", cex=2.5)
+text(-1.8,0, label="Dvil", cex=2.5)
+text(1.5,1, label="Gzad", cex=2.5)
+
+
+# b) eDNA only
+plot(meta.edna,type="n", xlim=c(-0.5,0.5), ylim=c(-0.5,0.5), cex.axis=2, cex.lab=1.5)
+points(meta.edna, select=which(fact_lake.edna[,1]=="WB"), col="black",pch=19, cex=2)
+points(meta.edna, select=which(fact_lake.edna[,1]=="GW"), col="blue",pch=15, cex=2)
+points(meta.edna, select=which(fact_lake.edna[,1]=="RB"), col="red",pch=17, cex=2)
+ordispider(meta.edna,group=fact_lake.edna[,1], col=c("blue","orange","black"),label=T, cex=2)
+ordiellipse(meta.edna,group=fact_lake.edna[,1],kind="ehull", lty=c(1,3,5),label=F,lwd=1)
+text(0.45,-0.45, label=paste("Stress:", round(meta.edna$stress, 4)), cex=1.5)
+text(-0.6,0.45, label="b)", cex=3)
+text(-0.2,0.45, label="eDNA", cex=2.5)
+
+# c) kick samples only
+plot(meta.kick, type="n", xlim=c(-0.5,0.5), ylim=c(-0.5,0.5), cex.axis=2, cex.lab=1.5)
+ordispider(meta.kick, group=fact_lake.kick[,1],col=c("blue","orange","green"),label=T, cex=2)
+points(meta.kick, select=which(fact_lake.kick[,1]=="WB"),col="black",pch=20, cex=2)
+points(meta.kick, select=which(fact_lake.kick[,1]=="GW"),col="blue",pch=15, cex=2)
+points(meta.kick, select=which(fact_lake.kick[,1]=="RB"),col="red",pch=17, cex=2)
+ordiellipse(meta.kick, group=fact_lake.kick[,1],kind="ehull",lty=c(1,3,5),label=F,lwd=1)
+text(0.5,-0.45, label=paste("Stress:", round(meta.kick$stress, 4)), cex=1.5)
+text(-0.6,0.45, label="c)", cex=3)
+text(0,0.45, label="kick", cex=2.5)
+
+# d) kick and eDNA
+plot(meta.edki,type="n", xlim=c(-0.5,0.5), ylim=c(-0.5,0.5), cex.axis=2, cex.lab=1.5)
+points(meta.edki, select=which(fact_lake.edki[,1]=="WB"), col="black",pch=19, cex=2)
+points(meta.edki, select=which(fact_lake.edki[,1]=="GW"), col="blue",pch=15, cex=2)
+points(meta.edki, select=which(fact_lake.edki[,1]=="RB"), col="red",pch=17, cex=2)
+ordispider(meta.edki,group=fact_lake.edki[,1], col=c("blue","orange","black"),label=T, cex=2)
+ordiellipse(meta.edki,group=fact_type.edki[,1],kind="ehull", lty=c(1,5),label=F,lwd=1)
+text(0.5,-0.45, label=paste("Stress:", round(meta.edki$stress, 4)), cex=1.5)
+text(-0.6,0.45, label="d)", cex=3)
+text(0.5,0.4, label="eDNA", cex=2.5)
+text(-0.5,0.25, label="kick", cex=2.5)
+
+# e) kick, eDNA and guts
+plot(meta.full,type="n", xlim=c(-4,3), ylim=c(-4,3), cex.axis=2, cex.lab=1.5)
+points(meta.full, select=which(fact_lake.full[,1]=="WB"), col="black",pch=19, cex=2)
+points(meta.full, select=which(fact_lake.full[,1]=="GW"), col="blue",pch=15, cex=2)
+points(meta.full, select=which(fact_lake.full[,1]=="RB"), col="red",pch=17, cex=2)
+ordispider(meta.full,group=fact_lake.full[,1], col=c("blue","orange","black"),label=T, cex=2)
+ordiellipse(meta.full,group=fact_type.full[,1],kind="ehull", lty=c(1,3,5),label=F,lwd=1)
+text(3,-3.8,label=paste("Stress:", round(meta.full$stress, 4)), cex=1.5)
+text(-4.7,2.7, label="e)", cex=3)
+text(3,0, label="eDNA", cex=2.5)
+text(-3,2.7, label="guts", cex=2.5)
+text(2,-3, label="kick", cex=2.5)
+
+
+# Common legend
+plot.new()
+legend("left", legend=c("Grafham Water","Wroxham Broad","Rockand Broad"), col=c("blue","black","red"), pch=c(15,19,17), cex=2, ncol=1)
+dev.off()
+```
+
 
 # Log files
 
