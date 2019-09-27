@@ -165,7 +165,7 @@ cov_feb = mean(colSums(feb_reads))-sd(colSums(feb_reads))
 cov_aug = mean(colSums(aug_reads))-sd(colSums(aug_reads))
 
 feb_cover = subset(feb_reads, select = colSums(feb_reads) >= 1000)
-aug_cover = subset(aug_reads, select = colSums(aug_reads) >= 100)
+aug_cover = subset(aug_reads, select = colSums(aug_reads) >= 500)
 ```
 
 After this initial low coverage filter we retained 98.5%, and 99.5% of the total number of reads; and respectively 75%, and 75.2% number of samples.
@@ -190,7 +190,7 @@ ggplot(cover_melt, aes(library, value)) +
   geom_jitter(alpha=0.4)
 ```
 
-Read survival is set at 98.8% for the first library and 99.5% for the second.
+Read survival is set at 99.7% for the first library and 99.9% for the second.
 
 ```{r read survival percentage, include=T}
 (sum(feb_cover)/sum(feb_reads))*100
@@ -445,10 +445,10 @@ dva[grep("DvA[0-9]{1,2}C[.]{1}1", rownames(dva)), "pcr_repl"] = 2
 dva[grep("DvA[0-9]{1,2}C[.]{1}2", rownames(dva)), "pcr_repl"] = 3
 dva[grep("DvA[0-9]{1,2}C[.]{1}3", rownames(dva)), "pcr_repl"] = 4
 
-
 # Feeding trials with Crangonyx
 #removing pcr and sample replicate numbers
-dvc$sample_id = gsub("[.][0-9]{1}$", "", gsub("[.][0-9]{1}$", "", dvc$sample_id))
+
+dvc$sample_id = gsub("[.][0-9]{1}$", "", gsub("[.][0-9AB]{1,2}$", "", dvc$sample_id))
 
 #setting pcr and sample repliate numbers in separate columns
 dvc$trial_repl = "NA"
@@ -960,7 +960,45 @@ abund.edna.kick[is.na(abund.edna.kick)] <- 0
 
 # 11. Summary table
 
-```{r summary table}
+```{r summary table for feeding trials}
+dva$trial_id = gsub("C${1}","", dva$sample_id)
+dvd$trial_id = gsub("C${1}","", dvd$sample_id)
+dvc$trial_id = gsub("[.]C${1}","", dvc$sample_id)
+
+colnames(dva)
+dva$trial_repl
+
+fa = dva %>% mutate(trial_id = factor(trial_id, levels=c("DvA0","DvA4","DvA8","DvA12","DvA24","DvA36"))) %>% mutate(trial_repl = factor(trial_repl, levels=c("control","1","2","4"))) %>%
+  ggplot(aes(pcr_repl, Asellus_aquaticus)) +
+  #geom_boxplot(outlier.shape=NA) +
+  geom_jitter() +
+  labs(x="PCR replicates", y="A. aquaticus DNA reads") +
+  facet_grid(trial_id~trial_repl) +
+  theme_bw()
+
+fd = dvd %>% mutate(trial_id = factor(trial_id, levels=c("DvD0","DvD4","DvD8","DvD12","DvD24","DvD36"))) %>% mutate(trial_repl = factor(trial_repl, levels=c("control","1","2","4"))) %>%
+  ggplot(aes(pcr_repl, Daphnia_magna)) +
+  #geom_boxplot(outlier.shape=NA) +
+  geom_jitter() +
+  labs(x="PCR replicates", y="D. magna DNA reads") +
+  facet_grid(trial_id~trial_repl) +
+  theme_bw()
+
+fc = dvc %>% mutate(trial_id = factor(trial_id, levels=c("DvG0","DvG4","DvG8","DvG12","DvG24","DvG36"))) %>% mutate(trial_repl = factor(trial_repl, levels=c("control","1","2","4"))) %>%
+  ggplot(aes("1", Crangonyx_pseudogracilis)) +
+#  geom_boxplot(outlier.shape=NA) +
+  geom_jitter() +
+  labs(x="PCR replicates", y="C. pseudogracilis DNA reads") +
+  facet_grid(trial_id~trial_repl) +
+  theme_bw()
+
+png("R_images/pcr_replicates_feeding_trials.png", width=4000, height=4000, units="px", res=300)
+plot_grid(fa, fd, fc, labels=c("a)","b)","c)"), nrow=1, ncol=3)
+dev.off()
+```
+
+
+```{r summary table for wild samples}
 guts.summary = as.data.frame(abund.guts[,!c(colnames(abund.guts) %in% c("sample_id"))] %>% group_by(sample_type,lake,predator_id,site) %>% summarise_all(list(sum)))
 edna.summary = as.data.frame(abund.edna[,!c(colnames(abund.edna) %in% c("sample_id"))] %>% group_by(sample_type,lake,site) %>% summarise_all(list(sum)))
 kick.summary = as.data.frame(abund.kick[,!c(colnames(abund.kick) %in% c("sample_id","REPLICATE"))] %>% group_by(sample_type,lake,site) %>% summarise_all(list(sum)))
