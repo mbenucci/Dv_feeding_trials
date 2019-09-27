@@ -484,6 +484,16 @@ dva = cbind(dva, dva.info)
 dvc = cbind(dvc, dvc.info)
 ```
 
+The only conamination we retained is very low (N reads = 7) of Human DNA in the feeding trials with _C.pseudogracilis_ (DvG). We feel confident in removing it.
+
+```{r removing DvG contamination}
+colSums(dvc[,!c(colnames(dvc) %in% c("sample_id","sample_type","trial_repl","pcr_repl"))])
+
+dvc = dvc[,!c(colnames(dvc) %in% "Homo_sapiens")]
+```
+
+We plot now the detection of preys by PCR replicates and trials replicates.
+
 ```{r pcr replicate plot for feeding trials}
 dva$trial_id = gsub("C${1}","", dva$sample_id)
 dvd$trial_id = gsub("C${1}","", dvd$sample_id)
@@ -518,38 +528,151 @@ plot_grid(fa, fd, fc, labels=c("a)","b)","c)"), nrow=1, ncol=3)
 dev.off()
 ```
 
- The only conamination we retained is very low (N reads = 7) of Human DNA in the feeding trials with _C.pseudogracilis_ (DvG). We feel confident in removing it.
-
-```{r removing DvG contamination}
-colSums(dvc[,!c(colnames(dvc) %in% c("sample_id","sample_type","trial_repl","pcr_repl"))])
-
-dvc = dvc[,!c(colnames(dvc) %in% "Homo_sapiens")]
-```
-
 Because we obtained the results from two separate sequencing libraries we need to normalise the DNA reads.
 
 ```{r normalised DNA reads}
-dvd.info = dvd[,c("sample_id","sample_type","trial_repl","pcr_repl")]
-dva.info = dva[,c("sample_id","sample_type","trial_repl","pcr_repl")]
-dvc.info = dvc[,c("sample_id","sample_type","trial_repl","pcr_repl")]
+dvd.info = dvd[,c("sample_id","sample_type","trial_repl","pcr_repl","trial_id")]
+dva.info = dva[,c("sample_id","sample_type","trial_repl","pcr_repl","trial_id")]
+dvc.info = dvc[,c("sample_id","sample_type","trial_repl","pcr_repl","trial_id")]
 
-dvd.norm = (dvd[,!c(colnames(dvd) %in% c("sample_id","sample_type","trial_repl","pcr_repl"))]/sum(feb_clean[,!c(colnames(feb_clean) %in% c("sample_id","sample_type"))]))*1000000
+dvd.norm = (dvd[,!c(colnames(dvd) %in% c("sample_id","sample_type","trial_repl","pcr_repl","trial_id"))]/sum(feb_clean[,!c(colnames(feb_clean) %in% c("sample_id","sample_type","trial_id"))]))*1000000
 
-dva.norm = (dva[,!c(colnames(dva) %in% c("sample_id","sample_type","trial_repl","pcr_repl"))]/sum(feb_clean[,!c(colnames(feb_clean) %in% c("sample_id","sample_type"))]))*1000000
+dva.norm = (dva[,!c(colnames(dva) %in% c("sample_id","sample_type","trial_repl","pcr_repl","trial_id"))]/sum(feb_clean[,!c(colnames(feb_clean) %in% c("sample_id","sample_type","trial_id"))]))*1000000
 
-dvc.norm = (dvc[,!c(colnames(dva) %in% c("sample_id","sample_type","trial_repl","pcr_repl"))]/sum(aug_clean[,!c(colnames(aug_clean) %in% c("sample_id","sample_type"))]))*1000000
+dvc.norm = (dvc[,!c(colnames(dva) %in% c("sample_id","sample_type","trial_repl","pcr_repl","trial_id"))]/sum(aug_clean[,!c(colnames(aug_clean) %in% c("sample_id","sample_type","trial_id"))]))*1000000
 
 dvd.norm = cbind(dvd.norm, dvd.info)
 dva.norm = cbind(dva.norm, dva.info)
 dvc.norm = cbind(dvc.norm, dvc.info)
 ```
 
+Probit GLM on individual preys
+
+```{r setting up data for probit}
+unique(dva$trial_repl)
+unique(dvd$trial_repl)
+unique(dvc$trial_repl)
+
+colnames(dva)
+
+dva.det = as.data.frame(dva)
+dvd.det = as.data.frame(dvd)
+dvc.det = as.data.frame(dvc)
+
+dva.det$time = sub('^\\w{3}', "", dva.det$trial_id)
+dvd.det$time = sub('^\\w{3}', "", dvd.det$trial_id)
+dvc.det$time = sub('^\\w{3}', "", dvc.det$trial_id)
+
+dva.det = transform(dva.det, time=as.numeric(time))
+dvd.det = transform(dvd.det, time=as.numeric(time))
+dvc.det = transform(dvc.det, time=as.numeric(time))
+
+## Asellus ##
+dva.det = as.data.frame(dva.det[,!c(colnames(dva.det) %in% c("sample_id","trial_id","pcr_repl"))] %>% group_by(trial_repl, sample_type, time) %>% summarise_all(list(sum)))
+
+## Daphnia ##
+dvd.det = as.data.frame(dvd.det[,!c(colnames(dvd.det) %in% c("sample_id","trial_id","pcr_repl"))] %>% group_by(trial_repl, sample_type, time) %>% summarise_all(list(sum)))
+
+## Crangonyx ##
+dvc.det = as.data.frame(dvc.det[,!c(colnames(dvc.det) %in% c("sample_id","trial_id","pcr_repl"))] %>% group_by(trial_repl, sample_type, time) %>% summarise_all(list(sum)))
+
+dva.det[,!c(colnames(dva.det) %in% c("sample_id","sample_type","trial_repl","pcr_repl","trial_id","time"))][dva.det[,!c(colnames(dva.det) %in% c("sample_id","sample_type","trial_repl","pcr_repl","trial_id","time"))] > 0] <- 1
+dvd.det[,!c(colnames(dvd.det) %in% c("sample_id","sample_type","trial_repl","pcr_repl","trial_id","time"))][dvd.det[,!c(colnames(dvd.det) %in% c("sample_id","sample_type","trial_repl","pcr_repl","trial_id","time"))] > 0] <- 1
+dvc.det[,!c(colnames(dvc.det) %in% c("sample_id","sample_type","trial_repl","pcr_repl","trial_id","time"))][dvc.det[,!c(colnames(dvc.det) %in% c("sample_id","sample_type","trial_repl","pcr_repl","trial_id","time"))] > 0] <- 1
+
+dva.det$Asellus_aquaticus = dva.det$Asellus_aquaticus/3
+dvd.det$Daphnia_magna = dvd.det$Daphnia_magna/5
+dvc.det$Crangonyx_pseudogracilis = dvc.det$Crangonyx_pseudogracilis/5
+```
+
+We need to remove the control replicates before running the Probit.
+ 
+# NOTE: TO FIX BELOW!!! 
+
+```{r probit}
+dva.det = dva.det[!c(dva.det$trial_repl == "control"),]
+dvd.det = dvd.det[!c(dvd.det$trial_repl == "control"),]
+dvc.det = dvc.det[!c(dvc.det$trial_repl == "control"),]
+
+dva.probit = glm(Asellus_aquaticus~time, family = quasibinomial(link="logit"), data=dva.det)
+summary(dva.probit); drop1(dva.probit, test="Chi")
+
+dvd.probit = glm(Daphnia_magna~time, family = quasibinomial(link="logit"), data=dvd.det)
+summary(dvd.probit); drop1(dvd.probit, test="Chi")
+
+dvc.probit = glm(Crangonyx_pseudogracilis~time, family = quasibinomial(link="logit"), data=dvc.det)
+summary(dvc.probit); drop1(dvc.probit, test="Chi")
+
+plot(dva.probit)
+qqnorm(resid(dva.probit,type="deviance"))
+qqline(resid(dva.probit,type="deviance"),col="red",lwd=2)
+hist(resid(dva.probit,type="deviance"),freq=F)
+
+## FIX HERE!
+## PLOTTING THE MODELS. WE USE "LINK" IN ORDER TO KEEP PREDICTIONS ##
+## AS 1 and 0 ##
+
+dvd.new = data.frame(time=seq(from=min(dvd.det$time),to=max(dvd.det$time),by=1))
+dvd.pred = predict(dvd.probit, newdata=as.matrix(dvd.new), type="link", se=T)
+
+new.asellus = data.frame(times=seq(from=min(asellus.glm$times),
+to=max(asellus.glm$times),by=1))
+asellus.pred = predict(asellus.glm.model, newdata=new.asellus, type="link", se=T)
+
+new.crangonyx = data.frame(times=seq(from=min(crangonyx.glm$times),
+to=max(crangonyx.glm$times),by=1))
+crangonyx.pred = predict(crangonyx.glm.prob, newdata=new.crangonyx, type="link", se=T)
+
+dev.new()
+par(mfrow=c(3,1))
+par(mar=c(5,6,3,1))
+
+plot(dvd.new$times, exp(dvd.pred$fit)/(1+exp(dvd.pred$fit)),
+type="l", ylim=c(0,1), xlab="times (hours)", ylab="Ratio of predators positive
+to prey DNA", main="Daphnia magna")
+lines(dvd.new$times, exp(dvd.pred$fit+1.96*dvd.pred$se.fit)/
+(1+exp(dvd.pred$fit+1.96*dvd.pred$se.fit)), lty=2)
+lines(dvd.new$times, exp(dvd.pred$fit-1.96*dvd.pred$se.fit)/
+(1+exp(dvd.pred$fit-1.96*dvd.pred$se.fit)), lty=2)
+points(dvd.det$time, dvd.det$valu)
+rug(dvd.det$time, side=1, col="black", ticksize = 0.02, lwd = 2)
+
+#dev.new()
+#par(mfrow=c(2,2))
+#par(mar=c(5,6,3,1))
+
+plot(new.asellus$times, exp(asellus.pred$fit)/(1+exp(asellus.pred$fit)),
+type="l", ylim=c(0,1), xlab="times (hours)", ylab="Ratio of predators positive
+to prey DNA", main="Asellus aquaticus")
+lines(new.asellus$times, exp(asellus.pred$fit+1.96*asellus.pred$se.fit)/
+(1+exp(asellus.pred$fit+1.96*asellus.pred$se.fit)), lty=2)
+lines(new.asellus$times, exp(asellus.pred$fit-1.96*asellus.pred$se.fit)/
+(1+exp(asellus.pred$fit-1.96*asellus.pred$se.fit)), lty=2)
+points(asellus.glm$times, asellus.glm$value)
+rug(asellus.glm$times, side=1, col="black", ticksize = 0.02, lwd = 2)
+
+#dev.new()
+#par(mfrow=c(2,2))
+#par(mar=c(5,6,3,1))
+
+plot(new.crangonyx$times, exp(crangonyx.pred$fit)/(1+exp(crangonyx.pred$fit)),
+type="l", ylim=c(0,1), xlab="times (hours)", ylab="Ratio of predators positive
+to prey DNA", main="Crangonyx pseudogracilis")
+lines(new.crangonyx$times, exp(crangonyx.pred$fit+1.96*crangonyx.pred$se.fit)/
+(1+exp(crangonyx.pred$fit+1.96*crangonyx.pred$se.fit)), lty=2)
+lines(new.crangonyx$times, exp(crangonyx.pred$fit-1.96*crangonyx.pred$se.fit)/
+(1+exp(crangonyx.pred$fit-1.96*crangonyx.pred$se.fit)), lty=2)
+points(crangonyx.glm$times, crangonyx.glm$value)
+rug(crangonyx.glm$times, side=1, col="black", ticksize = 0.02, lwd = 2)
+
+```
+
 Once we sorted the frames out we need to sum the sequences based on the pcr replicates. This need to be performed only for DvD and DvA trials
 
 ```{r summing pcr replicates}
-dvd.trials = as.data.frame(dvd.norm[,!c(colnames(dvd.norm) %in% "pcr_repl")] %>% group_by(sample_id, sample_type, trial_repl) %>% summarise_all(list(sum)))
+dvd.trials = as.data.frame(dvd.norm[,!c(colnames(dvd.norm) %in% "pcr_repl")] %>% group_by(sample_id, sample_type, trial_repl, trial_id) %>% summarise_all(list(sum)))
 
-dva.trials = as.data.frame(dva.norm[,!c(colnames(dva.norm) %in% "pcr_repl")] %>% group_by(sample_id, sample_type, trial_repl) %>% summarise_all(list(sum)))
+dva.trials = as.data.frame(dva.norm[,!c(colnames(dva.norm) %in% "pcr_repl")] %>% group_by(sample_id, sample_type, trial_repl, trial_id) %>% summarise_all(list(sum)))
 
 dvc.trials = dvc.norm[,!c(colnames(dvc.norm) %in% "pcr_repl")]
 ```
@@ -565,7 +688,6 @@ dvd.trials$times = sub('^\\w{3}', "", dvd.trials$sample_id)
 dva.trials$times = sub('^\\w{3}', "", dva.trials$sample_id)
 dvc.trials$times = sub("[.]", "", sub('^\\w{3}', "", dvc.trials$sample_id))
 ```
-
 
 ```{r setting up feeding trials}
 dvd.melt = melt(dvd.trials)
@@ -1063,7 +1185,7 @@ fa = dva %>% mutate(trial_id = factor(trial_id, levels=c("DvA0","DvA4","DvA8","D
   theme_bw() +
   guides(fill=guide_legend(ncol=1)) +
   theme(legend.position="right", legend.direction ="vertical", axis.text = element_text(size = 15), 
-        strip.text = element_text(size=15), axis.title = element_text(size =15),
+        strip.text = element_text(size=11), axis.title = element_text(size =15),
         legend.text = element_text(size=15))
 
 fd = dvd %>% mutate(trial_id = factor(trial_id, levels=c("DvD0","DvD4","DvD8","DvD12","DvD24","DvD36"))) %>% mutate(trial_repl = factor(trial_repl, levels=c("control","1","2","3","4","5"))) %>%
@@ -1074,7 +1196,7 @@ fd = dvd %>% mutate(trial_id = factor(trial_id, levels=c("DvD0","DvD4","DvD8","D
   theme_bw() +
   guides(fill=guide_legend(ncol=1)) +
   theme(legend.position="right", legend.direction ="vertical", axis.text = element_text(size = 15), 
-        strip.text = element_text(size=15), axis.title = element_text(size =15),
+        strip.text = element_text(size=11), axis.title = element_text(size =15),
         legend.text = element_text(size=15))
 
 fc = dvc %>% mutate(trial_id = factor(trial_id, levels=c("DvG0","DvG4","DvG8","DvG12","DvG24","DvG36"))) %>% mutate(trial_repl = factor(trial_repl, levels=c("control","1","2","3","4","5"))) %>%
@@ -1085,7 +1207,7 @@ fc = dvc %>% mutate(trial_id = factor(trial_id, levels=c("DvG0","DvG4","DvG8","D
   theme_bw() +
   guides(fill=guide_legend(ncol=1)) +
   theme(legend.position="right", legend.direction ="vertical", axis.text = element_text(size = 15), 
-        strip.text = element_text(size=15), axis.title = element_text(size =15),
+        strip.text = element_text(size=11), axis.title = element_text(size =15),
         legend.text = element_text(size=15))
 
 png("R_images/publication_pcr_replicates.png", width=4000, height=4000, units="px", res=300)
