@@ -1050,7 +1050,6 @@ final.melt %>% mutate(sample_type = factor(sample_type, levels=c("gut contents",
 dev.off()
 ```
 
-
 # Log files
 
 ```{r log session info}
