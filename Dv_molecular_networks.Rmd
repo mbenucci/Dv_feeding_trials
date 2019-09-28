@@ -643,11 +643,6 @@ points(dvc.det$time, dvc.det$Crangonyx_pseudogracilis)
 rug(dvc.det$time, side=1, col="black", ticksize = 0.02, lwd = 2)
 ```
 
-```{r}
-dva.pred
-```
-
-
 ```{r detection curves plot}
 png("R_images/feeding_trials_probit.png", width=4000, height=4000, units="px", res=300)
 par(mfrow=c(3,1), mar=c(5,6,3,1))
@@ -731,6 +726,47 @@ ggplot(trials.melt[trials.melt$variable != "D.villosus",], aes(times, value)) +
   theme_bw() +
   labs(x="Digestion time (hours)",y="Normalised DNA reads") +
   theme(legend.position="none")
+dev.off()
+```
+
+```{r pcr replicate plot for feeding trials}
+dva$trial_id = gsub("C${1}","", dva$sample_id)
+dvd$trial_id = gsub("C${1}","", dvd$sample_id)
+dvc$trial_id = gsub("[.]C${1}","", dvc$sample_id)
+
+dva = dva %>% mutate(trial_id = factor(trial_id, levels=c("DvA0","DvA4","DvA8","DvA12","DvA24","DvA36"))) %>% mutate(trial_repl = factor(trial_repl, levels=c("control","1","2","3","4","5")))
+
+dvd = dvd %>% mutate(trial_id = factor(trial_id, levels=c("DvD0","DvD4","DvD8","DvD12","DvD24","DvD36"))) %>% mutate(trial_repl = factor(trial_repl, levels=c("control","1","2","3","4","5")))
+
+dvc = dvc %>% mutate(trial_id = factor(trial_id, levels=c("DvG0","DvG4","DvG8","DvG12","DvG24","DvG36"))) %>% mutate(trial_repl = factor(trial_repl, levels=c("control","1","2","3","4","5")))
+
+
+fa = ggplot(dva, aes(pcr_repl, Asellus_aquaticus)) +
+  geom_point(data=dva[c(dva$Asellus_aquaticus > 0),], inherit.aes=T, color="red") +
+  geom_point(data=dva[c(dva$Asellus_aquaticus == 0),], inherit.aes=T, alpha=0.5) +
+  labs(x="PCR replicates", y="A. aquaticus DNA reads") +
+  facet_grid(trial_id~trial_repl) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+fd = ggplot(dvd, aes(pcr_repl, Daphnia_magna)) +
+ geom_point(data=dvd[c(dvd$Daphnia_magna > 0),], inherit.aes=T, color="red") +
+  geom_point(data=dvd[c(dvd$Daphnia_magna == 0),], inherit.aes=T, alpha=0.5) +
+  labs(x="PCR replicates", y="D. magna DNA reads") +
+  facet_grid(trial_id~trial_repl) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+fc = ggplot(dvc, aes("1", Crangonyx_pseudogracilis)) +
+  geom_point(data=dvc[c(dvc$Crangonyx_pseudogracilis > 0),], inherit.aes=T, color="red") +
+  geom_point(data=dvc[c(dvc$Crangonyx_pseudogracilis == 0),], inherit.aes=T, alpha=0.5) +
+  labs(x="PCR replicates", y="C. pseudogracilis DNA reads") +
+  facet_grid(trial_id~trial_repl) +
+  theme_bw() +
+  theme(legend.position = "none")
+
+png("R_images/pcr_replicates_feeding_trials.png", width=4000, height=4000, units="px", res=300)
+plot_grid(fa, fd, fc, labels=c("a)","b)","c)"), nrow=1, ncol=3)
 dev.off()
 ```
 
@@ -927,7 +963,6 @@ occup.edna = as.data.frame(abund.edna[,!c(colnames(abund.edna) %in% c("sample_id
 occup.edna = bind_cols(occup.edna, abund.edna[,c(colnames(abund.edna) %in% c("sample_id","sample_type","site","lake"))])
 ```
 
-
 # 9. Microscopy community
 
 Microscopy data from the community collected with the kick-samples are available in 6 separate files belonging to each lake from either sampling season.
@@ -1007,8 +1042,7 @@ png("R_images/kick-samples_rarefactions.png", width = 3000, height = 3000, units
 ggiNEXT(inext.kick) +
   labs(y = "", x="Number of individuals") +
   theme(legend.position="right") +
-  facet_grid(order~., labeller=as_labeller(strip_labels), scales="free") +
-  ggtitle("Rarefaction curves of communities in kick samples")
+  facet_grid(order~., labeller=as_labeller(strip_labels), scales="free")
 dev.off()
 ```
 
@@ -1069,20 +1103,6 @@ richness.full %>% mutate(site = factor(lake, levels=c("GW","WB","RB"))) %>%
   theme_bw() + labs(y="Species richness", x="") +
   theme(axis.text=element_text(size=12), axis.title=element_text(size=14,face="bold"))
 dev.off()
-
-shannon.kick = diversity(diversity.kick[,!c(colnames(diversity.kick) %in% c("site","sample_id","sample_type","time","lake"))], index="shannon")
-shannon.kick = cbind(shannon.kick, diversity.kick[,c(colnames(diversity.kick) %in% c("site","sample_id","sample_type","time","lake"))])
-colnames(shannon.kick)[colnames(shannon.kick) == "shannon.kick"] <- "diversity"
-
-png("R_images/shannon_kick-samples_boxplot.png", width=3000, height=3000, units="px", res=300)
-shannon.kick %>% mutate(site = factor(site, levels=c("GW","WB","RB"))) %>% 
-  ggplot(aes(site, diversity)) +
-  geom_boxplot(aes(fill=sample_type), outlier.shape = NA, alpha=0.9) +
-  geom_point(position=position_jitterdodge(dodge.width = 0.85), aes(fill=sample_type), color="black", pch=21, size=2, alpha=0.5) +
-#  facet_grid(.~sample_type, scales = "free_x") +
-  theme_bw() + labs(y="Shannon diversity", x="") +
-  theme(axis.text=element_text(size=12), axis.title=element_text(size=14,face="bold"))
-dev.off()
 ```
 
 
@@ -1111,48 +1131,12 @@ mean(wb_kickrich)
 sd(wb_kickrich)/sqrt(length(wb_kickrich))
 ```
 
-# 10. Community (eDNA and kick) vs gut contents
-
-```{r PERMANOVA kick vs eDNA}
-abund.edna.kick = full_join(abund.edna, occup.kick)
-abund.edna.kick[is.na(abund.edna.kick)] <- 0
-```
-
 # 11. Summary table
 
-```{r pcr replicate plot for feeding trials}
-dva$trial_id = gsub("C${1}","", dva$sample_id)
-dvd$trial_id = gsub("C${1}","", dvd$sample_id)
-dvc$trial_id = gsub("[.]C${1}","", dvc$sample_id)
+```{r summary table for feeding trials}
 
-#colnames(dva)
-#dva$trial_repl
-
-fa = dva %>% mutate(trial_id = factor(trial_id, levels=c("DvA0","DvA4","DvA8","DvA12","DvA24","DvA36"))) %>% mutate(trial_repl = factor(trial_repl, levels=c("control","1","2","3","4","5"))) %>%
-  ggplot(aes(pcr_repl, Asellus_aquaticus)) +
-  geom_point() +
-  labs(x="PCR replicates", y="A. aquaticus DNA reads") +
-  facet_grid(trial_id~trial_repl) +
-  theme_bw()
-
-fd = dvd %>% mutate(trial_id = factor(trial_id, levels=c("DvD0","DvD4","DvD8","DvD12","DvD24","DvD36"))) %>% mutate(trial_repl = factor(trial_repl, levels=c("control","1","2","3","4","5"))) %>%
-  ggplot(aes(pcr_repl, Daphnia_magna)) +
-  geom_point() +
-  labs(x="PCR replicates", y="D. magna DNA reads") +
-  facet_grid(trial_id~trial_repl) +
-  theme_bw()
-
-fc = dvc %>% mutate(trial_id = factor(trial_id, levels=c("DvG0","DvG4","DvG8","DvG12","DvG24","DvG36"))) %>% mutate(trial_repl = factor(trial_repl, levels=c("control","1","2","3","4","5"))) %>%
-  ggplot(aes("1", Crangonyx_pseudogracilis)) +
-  geom_point() +
-  labs(x="PCR replicates", y="C. pseudogracilis DNA reads") +
-  facet_grid(trial_id~trial_repl) +
-  theme_bw()
-
-png("R_images/pcr_replicates_feeding_trials.png", width=4000, height=4000, units="px", res=300)
-plot_grid(fa, fd, fc, labels=c("a)","b)","c)"), nrow=1, ncol=3)
-dev.off()
 ```
+
 
 
 ```{r summary table for wild samples}
@@ -1181,36 +1165,36 @@ write.csv(final.data, "R_outputs/Data_summary_table.csv")
 
 # 12. Publication plots
 ```{r publication plot pcr replicates}
-fa = dva %>% mutate(trial_id = factor(trial_id, levels=c("DvA0","DvA4","DvA8","DvA12","DvA24","DvA36"))) %>% mutate(trial_repl = factor(trial_repl, levels=c("control","1","2","3","4","5"))) %>%
-  ggplot(aes(pcr_repl, Asellus_aquaticus)) +
-  geom_point() +
-  labs(x="PCR replicates", y="A. aquaticus DNA reads") +
+fa = ggplot(dva, aes(pcr_repl, Asellus_aquaticus)) +
+  geom_point(data=dva[c(dva$Asellus_aquaticus > 0),], inherit.aes=T, color="red") +
+  geom_point(data=dva[c(dva$Asellus_aquaticus == 0),], inherit.aes=T, alpha=0.5) +
+  labs(x="PCR replicates", y="A. aquaticus DNA reads", subtitle="trials replicates") +
   facet_grid(trial_id~trial_repl) +
   theme_bw() +
   guides(fill=guide_legend(ncol=1)) +
-  theme(legend.position="right", legend.direction ="vertical", axis.text = element_text(size = 15), 
+  theme(legend.position="none", legend.direction ="vertical", axis.text = element_text(size = 15), 
         strip.text = element_text(size=11), axis.title = element_text(size =15),
         legend.text = element_text(size=15))
 
-fd = dvd %>% mutate(trial_id = factor(trial_id, levels=c("DvD0","DvD4","DvD8","DvD12","DvD24","DvD36"))) %>% mutate(trial_repl = factor(trial_repl, levels=c("control","1","2","3","4","5"))) %>%
-  ggplot(aes(pcr_repl, Daphnia_magna)) +
-  geom_point() +
-  labs(x="PCR replicates", y="D. magna DNA reads") +
+fd = ggplot(dvd, aes(pcr_repl, Daphnia_magna)) +
+ geom_point(data=dvd[c(dvd$Daphnia_magna > 0),], inherit.aes=T, color="red") +
+  geom_point(data=dvd[c(dvd$Daphnia_magna == 0),], inherit.aes=T, alpha=0.5) +
+  labs(x="PCR replicates", y="D. magna DNA reads", subtitle="trials replicates") +
   facet_grid(trial_id~trial_repl) +
   theme_bw() +
   guides(fill=guide_legend(ncol=1)) +
-  theme(legend.position="right", legend.direction ="vertical", axis.text = element_text(size = 15), 
+  theme(legend.position="none", legend.direction ="vertical", axis.text = element_text(size = 15), 
         strip.text = element_text(size=11), axis.title = element_text(size =15),
         legend.text = element_text(size=15))
 
-fc = dvc %>% mutate(trial_id = factor(trial_id, levels=c("DvG0","DvG4","DvG8","DvG12","DvG24","DvG36"))) %>% mutate(trial_repl = factor(trial_repl, levels=c("control","1","2","3","4","5"))) %>%
-  ggplot(aes("1", Crangonyx_pseudogracilis)) +
-  geom_point() +
-  labs(x="PCR replicates", y="C. pseudogracilis DNA reads") +
+fc = ggplot(dvc, aes("1", Crangonyx_pseudogracilis)) +
+  geom_point(data=dvc[c(dvc$Crangonyx_pseudogracilis > 0),], inherit.aes=T, color="red") +
+  geom_point(data=dvc[c(dvc$Crangonyx_pseudogracilis == 0),], inherit.aes=T, alpha=0.5) +
+  labs(x="PCR replicates", y="C. pseudogracilis DNA reads", subtitle="trials replicates") +
   facet_grid(trial_id~trial_repl) +
   theme_bw() +
   guides(fill=guide_legend(ncol=1)) +
-  theme(legend.position="right", legend.direction ="vertical", axis.text = element_text(size = 15), 
+  theme(legend.position="none", legend.direction ="vertical", axis.text = element_text(size = 15), 
         strip.text = element_text(size=11), axis.title = element_text(size =15),
         legend.text = element_text(size=15))
 
@@ -1290,19 +1274,16 @@ plot(dva.new$time, exp(dva.pred$fit)/(1+exp(dva.pred$fit)), type="l", ylim=c(0,1
 lines(dva.new$time, exp(dva.pred$fit+1.96*dva.pred$se.fit)/(1+exp(dva.pred$fit+1.96*dva.pred$se.fit)), lty=2, lwd=1)
 lines(dva.new$time, exp(dva.pred$fit-1.96*dva.pred$se.fit)/(1+exp(dva.pred$fit-1.96*dva.pred$se.fit)), lty=2, lwd=1)
 points(dva.det$time, dva.det$Asellus_aquaticus, cex=2)
-#rug(dva.det$time, side=1, col="black", ticksize = 0.02, lwd = 2)
 
 plot(dvd.new$time, exp(dvd.pred$fit)/(1+exp(dvd.pred$fit)), type="l", ylim=c(0,1), xlab="times (hours)", ylab="Probability of detection (D. magna)", cex.axis=2, cex.lab=2)
 lines(dvd.new$time, exp(dvd.pred$fit+1.96*dvd.pred$se.fit)/(1+exp(dvd.pred$fit+1.96*dvd.pred$se.fit)), lty=2)
 lines(dvd.new$time, exp(dvd.pred$fit-1.96*dvd.pred$se.fit)/(1+exp(dvd.pred$fit-1.96*dvd.pred$se.fit)), lty=2)
 points(dvd.det$time, dvd.det$Daphnia_magna, cex=2)
-#rug(dvd.det$time, side=1, col="black", ticksize = 0.02, lwd = 2)
 
 plot(dvc.new$time, exp(dvc.pred$fit)/(1+exp(dvc.pred$fit)), type="l", ylim=c(0,1), xlab="times (hours)", ylab="Probability of detection (C. pseudogracilis)",cex.axis=2, cex.lab=2)
 lines(dvc.new$time, exp(dvc.pred$fit+1.96*dvc.pred$se.fit)/(1+exp(dvc.pred$fit+1.96*dvc.pred$se.fit)), lty=2)
 lines(dvc.new$time, exp(dvc.pred$fit-1.96*dvc.pred$se.fit)/(1+exp(dvc.pred$fit-1.96*dvc.pred$se.fit)), lty=2)
 points(dvc.det$time, dvc.det$Crangonyx_pseudogracilis, cex=2)
-#rug(dvc.det$time, side=1, col="black", ticksize = 0.02, lwd = 2)
 dev.off()
 ```
 
