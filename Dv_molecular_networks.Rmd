@@ -563,10 +563,6 @@ dva.det$time = sub('^\\w{3}', "", dva.det$trial_id)
 dvd.det$time = sub('^\\w{3}', "", dvd.det$trial_id)
 dvc.det$time = sub('^\\w{3}', "", dvc.det$trial_id)
 
-dva.det = transform(dva.det, time=as.numeric(time))
-dvd.det = transform(dvd.det, time=as.numeric(time))
-dvc.det = transform(dvc.det, time=as.numeric(time))
-
 ## Asellus ##
 dva.det = as.data.frame(dva.det[,!c(colnames(dva.det) %in% c("sample_id","trial_id","pcr_repl"))] %>% group_by(trial_repl, sample_type, time) %>% summarise_all(list(sum)))
 
@@ -587,84 +583,92 @@ dvc.det$Crangonyx_pseudogracilis = dvc.det$Crangonyx_pseudogracilis/5
 
 We need to remove the control replicates before running the Probit.
  
-# NOTE: TO FIX BELOW!!! 
-
 ```{r probit}
 dva.det = dva.det[!c(dva.det$trial_repl == "control"),]
 dvd.det = dvd.det[!c(dvd.det$trial_repl == "control"),]
 dvc.det = dvc.det[!c(dvc.det$trial_repl == "control"),]
 
-dva.probit = glm(Asellus_aquaticus~time, family = quasibinomial(link="logit"), data=dva.det)
+dva.det = as.data.frame(dva.det[,!c(colnames(dva.det) %in% c("trial_repl"))] %>% group_by(sample_type, time) %>% summarise_all(list(sum)))
+dvd.det = as.data.frame(dvd.det[,!c(colnames(dvd.det) %in% c("trial_repl"))] %>% group_by(sample_type, time) %>% summarise_all(list(sum)))
+dvc.det = as.data.frame(dvc.det[,!c(colnames(dvc.det) %in% c("trial_repl"))] %>% group_by(sample_type, time) %>% summarise_all(list(sum)))
+
+dva.det = transform(dva.det, time=as.numeric(time))
+dvd.det = transform(dvd.det, time=as.numeric(time))
+dvc.det = transform(dvc.det, time=as.numeric(time))
+
+dva.probit = glm(Asellus_aquaticus~time, family = quasibinomial(link="probit"), data=dva.det)
 summary(dva.probit); drop1(dva.probit, test="Chi")
 
-dvd.probit = glm(Daphnia_magna~time, family = quasibinomial(link="logit"), data=dvd.det)
+1-pchisq((dva.probit$null.deviance - dva.probit$deviance), df=(dva.probit$df.null - dva.probit$df.residual))
+
+dvd.probit = glm(Daphnia_magna~time, family = quasibinomial(link="probit"), data=dvd.det)
 summary(dvd.probit); drop1(dvd.probit, test="Chi")
 
-dvc.probit = glm(Crangonyx_pseudogracilis~time, family = quasibinomial(link="logit"), data=dvc.det)
+1-pchisq((dvd.probit$null.deviance - dvd.probit$deviance), df=(dvd.probit$df.null - dvd.probit$df.residual))
+
+dvc.probit = glm(Crangonyx_pseudogracilis~time, family = quasibinomial(link="probit"), data=dvc.det)
 summary(dvc.probit); drop1(dvc.probit, test="Chi")
 
-plot(dva.probit)
-qqnorm(resid(dva.probit,type="deviance"))
-qqline(resid(dva.probit,type="deviance"),col="red",lwd=2)
-hist(resid(dva.probit,type="deviance"),freq=F)
+1-pchisq((dvc.probit$null.deviance - dvc.probit$deviance), df=(dvc.probit$df.null - dvc.probit$df.residual))
 
-## FIX HERE!
-## PLOTTING THE MODELS. WE USE "LINK" IN ORDER TO KEEP PREDICTIONS ##
-## AS 1 and 0 ##
+# Adding the predictions and se.
+# Asellus
+dva.new = data.frame(time=seq(from=min(dva.det$time), to=max(dva.det$time), by=1))
+dva.pred = predict(dva.probit, newdata=dva.new, type="link", se=T)
 
-dvd.new = data.frame(time=seq(from=min(dvd.det$time),to=max(dvd.det$time),by=1))
-dvd.pred = predict(dvd.probit, newdata=as.matrix(dvd.new), type="link", se=T)
+plot(dva.new$time, exp(dva.pred$fit)/(1+exp(dva.pred$fit)), type="l", ylim=c(0,1), xlab="times (hours)", ylab="Ratio of predators positive to prey DNA", main="A. aquaticus")
+lines(dva.new$time, exp(dva.pred$fit+1.96*dva.pred$se.fit)/(1+exp(dva.pred$fit+1.96*dva.pred$se.fit)), lty=2)
+lines(dva.new$time, exp(dva.pred$fit-1.96*dva.pred$se.fit)/(1+exp(dva.pred$fit-1.96*dva.pred$se.fit)), lty=2)
+points(dva.det$time, dva.det$Asellus_aquaticus)
+rug(dva.det$time, side=1, col="black", ticksize = 0.02, lwd = 2)
 
-new.asellus = data.frame(times=seq(from=min(asellus.glm$times),
-to=max(asellus.glm$times),by=1))
-asellus.pred = predict(asellus.glm.model, newdata=new.asellus, type="link", se=T)
+# Daphnia
+dvd.new = data.frame(time=seq(from=min(dvd.det$time), to=max(dvd.det$time), by=1))
+dvd.pred = predict(dvd.probit, newdata=dvd.new, type="link", se=T)
 
-new.crangonyx = data.frame(times=seq(from=min(crangonyx.glm$times),
-to=max(crangonyx.glm$times),by=1))
-crangonyx.pred = predict(crangonyx.glm.prob, newdata=new.crangonyx, type="link", se=T)
-
-dev.new()
-par(mfrow=c(3,1))
-par(mar=c(5,6,3,1))
-
-plot(dvd.new$times, exp(dvd.pred$fit)/(1+exp(dvd.pred$fit)),
-type="l", ylim=c(0,1), xlab="times (hours)", ylab="Ratio of predators positive
-to prey DNA", main="Daphnia magna")
-lines(dvd.new$times, exp(dvd.pred$fit+1.96*dvd.pred$se.fit)/
-(1+exp(dvd.pred$fit+1.96*dvd.pred$se.fit)), lty=2)
-lines(dvd.new$times, exp(dvd.pred$fit-1.96*dvd.pred$se.fit)/
-(1+exp(dvd.pred$fit-1.96*dvd.pred$se.fit)), lty=2)
-points(dvd.det$time, dvd.det$valu)
+plot(dvd.new$time, exp(dvd.pred$fit)/(1+exp(dvd.pred$fit)),type="l", ylim=c(0,1), xlab="times (hours)", ylab="Ratio of predators positive to prey DNA", main="D. magna")
+lines(dvd.new$time, exp(dvd.pred$fit+1.96*dvd.pred$se.fit)/(1+exp(dvd.pred$fit+1.96*dvd.pred$se.fit)), lty=2)
+lines(dvd.new$time, exp(dvd.pred$fit-1.96*dvd.pred$se.fit)/(1+exp(dvd.pred$fit-1.96*dvd.pred$se.fit)), lty=2)
+points(dvd.det$time, dvd.det$Daphnia_magna)
 rug(dvd.det$time, side=1, col="black", ticksize = 0.02, lwd = 2)
 
-#dev.new()
-#par(mfrow=c(2,2))
-#par(mar=c(5,6,3,1))
+# Crangonyx
+dvc.new = data.frame(time=seq(from=min(dvc.det$time), to=max(dvc.det$time), by=1))
+dvc.pred = predict(dvc.probit, newdata=dvc.new, type="link", se=T)
 
-plot(new.asellus$times, exp(asellus.pred$fit)/(1+exp(asellus.pred$fit)),
-type="l", ylim=c(0,1), xlab="times (hours)", ylab="Ratio of predators positive
-to prey DNA", main="Asellus aquaticus")
-lines(new.asellus$times, exp(asellus.pred$fit+1.96*asellus.pred$se.fit)/
-(1+exp(asellus.pred$fit+1.96*asellus.pred$se.fit)), lty=2)
-lines(new.asellus$times, exp(asellus.pred$fit-1.96*asellus.pred$se.fit)/
-(1+exp(asellus.pred$fit-1.96*asellus.pred$se.fit)), lty=2)
-points(asellus.glm$times, asellus.glm$value)
-rug(asellus.glm$times, side=1, col="black", ticksize = 0.02, lwd = 2)
+plot(dvc.new$time, exp(dvc.pred$fit)/(1+exp(dvc.pred$fit)), type="l", ylim=c(0,1), xlab="times (hours)", ylab="Ratio of predators positive to prey DNA", main="C. pseudogracilis")
+lines(dvc.new$time, exp(dvc.pred$fit+1.96*dvc.pred$se.fit)/(1+exp(dvc.pred$fit+1.96*dvc.pred$se.fit)), lty=2)
+lines(dvc.new$time, exp(dvc.pred$fit-1.96*dvc.pred$se.fit)/(1+exp(dvc.pred$fit-1.96*dvc.pred$se.fit)), lty=2)
+points(dvc.det$time, dvc.det$Crangonyx_pseudogracilis)
+rug(dvc.det$time, side=1, col="black", ticksize = 0.02, lwd = 2)
+```
 
-#dev.new()
-#par(mfrow=c(2,2))
-#par(mar=c(5,6,3,1))
+```{r}
+dva.pred
+```
 
-plot(new.crangonyx$times, exp(crangonyx.pred$fit)/(1+exp(crangonyx.pred$fit)),
-type="l", ylim=c(0,1), xlab="times (hours)", ylab="Ratio of predators positive
-to prey DNA", main="Crangonyx pseudogracilis")
-lines(new.crangonyx$times, exp(crangonyx.pred$fit+1.96*crangonyx.pred$se.fit)/
-(1+exp(crangonyx.pred$fit+1.96*crangonyx.pred$se.fit)), lty=2)
-lines(new.crangonyx$times, exp(crangonyx.pred$fit-1.96*crangonyx.pred$se.fit)/
-(1+exp(crangonyx.pred$fit-1.96*crangonyx.pred$se.fit)), lty=2)
-points(crangonyx.glm$times, crangonyx.glm$value)
-rug(crangonyx.glm$times, side=1, col="black", ticksize = 0.02, lwd = 2)
 
+```{r detection curves plot}
+png("R_images/feeding_trials_probit.png", width=4000, height=4000, units="px", res=300)
+par(mfrow=c(3,1), mar=c(5,6,3,1))
+plot(dva.new$time, exp(dva.pred$fit)/(1+exp(dva.pred$fit)), type="l", ylim=c(0,1), xlab="times (hours)", ylab="Ratio of predators positive to prey DNA", main="A. aquaticus")
+lines(dva.new$time, exp(dva.pred$fit+1.96*dva.pred$se.fit)/(1+exp(dva.pred$fit+1.96*dva.pred$se.fit)), lty=2)
+lines(dva.new$time, exp(dva.pred$fit-1.96*dva.pred$se.fit)/(1+exp(dva.pred$fit-1.96*dva.pred$se.fit)), lty=2)
+points(dva.det$time, dva.det$Asellus_aquaticus)
+rug(dva.det$time, side=1, col="black", ticksize = 0.02, lwd = 2)
+
+plot(dvd.new$time, exp(dvd.pred$fit)/(1+exp(dvd.pred$fit)), type="l", ylim=c(0,1), xlab="times (hours)", ylab="Ratio of predators positive to prey DNA", main="D. magna")
+lines(dvd.new$time, exp(dvd.pred$fit+1.96*dvd.pred$se.fit)/(1+exp(dvd.pred$fit+1.96*dvd.pred$se.fit)), lty=2)
+lines(dvd.new$time, exp(dvd.pred$fit-1.96*dvd.pred$se.fit)/(1+exp(dvd.pred$fit-1.96*dvd.pred$se.fit)), lty=2)
+points(dvd.det$time, dvd.det$Daphnia_magna)
+rug(dvd.det$time, side=1, col="black", ticksize = 0.02, lwd = 2)
+
+plot(dvc.new$time, exp(dvc.pred$fit)/(1+exp(dvc.pred$fit)), type="l", ylim=c(0,1), xlab="times (hours)", ylab="Ratio of predators positive to prey DNA", main="C. pseudogracilis")
+lines(dvc.new$time, exp(dvc.pred$fit+1.96*dvc.pred$se.fit)/(1+exp(dvc.pred$fit+1.96*dvc.pred$se.fit)), lty=2)
+lines(dvc.new$time, exp(dvc.pred$fit-1.96*dvc.pred$se.fit)/(1+exp(dvc.pred$fit-1.96*dvc.pred$se.fit)), lty=2)
+points(dvc.det$time, dvc.det$Crangonyx_pseudogracilis)
+rug(dvc.det$time, side=1, col="black", ticksize = 0.02, lwd = 2)
+dev.off()
 ```
 
 Once we sorted the frames out we need to sum the sequences based on the pcr replicates. This need to be performed only for DvD and DvA trials
@@ -1276,6 +1280,29 @@ final.melt %>% mutate(sample_type = factor(sample_type, levels=c("gut contents",
   theme(legend.position="right", legend.direction ="vertical", axis.text = element_text(size = 15), 
         strip.text = element_text(size=15), axis.title = element_text(size =15),
         legend.text = element_text(size=15))
+dev.off()
+```
+
+```{r publication probit plot}
+png("R_images/publication_feeding_trials_probit.png", width=4000, height=4000, units="px", res=300)
+par(mfrow=c(3,1), mar=c(5,6,3,1))
+plot(dva.new$time, exp(dva.pred$fit)/(1+exp(dva.pred$fit)), type="l", ylim=c(0,1), xlab="times (hours)", ylab="Probability of detection (A. aquaticus)", cex.axis=2, cex.lab=2)
+lines(dva.new$time, exp(dva.pred$fit+1.96*dva.pred$se.fit)/(1+exp(dva.pred$fit+1.96*dva.pred$se.fit)), lty=2, lwd=1)
+lines(dva.new$time, exp(dva.pred$fit-1.96*dva.pred$se.fit)/(1+exp(dva.pred$fit-1.96*dva.pred$se.fit)), lty=2, lwd=1)
+points(dva.det$time, dva.det$Asellus_aquaticus, cex=2)
+#rug(dva.det$time, side=1, col="black", ticksize = 0.02, lwd = 2)
+
+plot(dvd.new$time, exp(dvd.pred$fit)/(1+exp(dvd.pred$fit)), type="l", ylim=c(0,1), xlab="times (hours)", ylab="Probability of detection (D. magna)", cex.axis=2, cex.lab=2)
+lines(dvd.new$time, exp(dvd.pred$fit+1.96*dvd.pred$se.fit)/(1+exp(dvd.pred$fit+1.96*dvd.pred$se.fit)), lty=2)
+lines(dvd.new$time, exp(dvd.pred$fit-1.96*dvd.pred$se.fit)/(1+exp(dvd.pred$fit-1.96*dvd.pred$se.fit)), lty=2)
+points(dvd.det$time, dvd.det$Daphnia_magna, cex=2)
+#rug(dvd.det$time, side=1, col="black", ticksize = 0.02, lwd = 2)
+
+plot(dvc.new$time, exp(dvc.pred$fit)/(1+exp(dvc.pred$fit)), type="l", ylim=c(0,1), xlab="times (hours)", ylab="Probability of detection (C. pseudogracilis)",cex.axis=2, cex.lab=2)
+lines(dvc.new$time, exp(dvc.pred$fit+1.96*dvc.pred$se.fit)/(1+exp(dvc.pred$fit+1.96*dvc.pred$se.fit)), lty=2)
+lines(dvc.new$time, exp(dvc.pred$fit-1.96*dvc.pred$se.fit)/(1+exp(dvc.pred$fit-1.96*dvc.pred$se.fit)), lty=2)
+points(dvc.det$time, dvc.det$Crangonyx_pseudogracilis, cex=2)
+#rug(dvc.det$time, side=1, col="black", ticksize = 0.02, lwd = 2)
 dev.off()
 ```
 
