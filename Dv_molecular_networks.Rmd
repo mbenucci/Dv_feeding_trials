@@ -1134,7 +1134,31 @@ sd(wb_kickrich)/sqrt(length(wb_kickrich))
 # 11. Summary table
 
 ```{r summary table for feeding trials}
+dva.summary = as.data.frame(dva)
+dvd.summary = as.data.frame(dvd)
+dvc.summary = as.data.frame(dvc)
 
+dva.summary = transform(dva.summary, pcr_repl=as.character(pcr_repl))
+dvd.summary = transform(dvd.summary, pcr_repl=as.character(pcr_repl))
+dvc.summary = transform(dvc.summary, pcr_repl=as.character(pcr_repl))
+
+dva.summary$trial_id = gsub("^DvA", "", dva.summary$sample_id)
+dvd.summary$trial_id = gsub("^DvD", "", dvd.summary$sample_id)
+dvc.summary$trial_id = gsub("^DvG", "", gsub("[.]", "", dvc.summary$sample_id))
+
+dva.summary = as.data.frame(dva.summary[,!c(colnames(dva.summary) %in% c("sample_id","pcr_repl"))] %>% group_by(sample_type, trial_id, trial_repl) %>% summarise_all(list(sum)))
+dvd.summary = as.data.frame(dvd.summary[,!c(colnames(dvd.summary) %in% c("sample_id","pcr_repl"))] %>% group_by(sample_type, trial_id, trial_repl) %>% summarise_all(list(sum)))
+dvc.summary = as.data.frame(dvc.summary[,!c(colnames(dvc.summary) %in% c("sample_id","pcr_repl"))] %>% group_by(sample_type, trial_id, trial_repl) %>% summarise_all(list(sum)))
+
+feed.summary = full_join(dva.summary[,!c(colnames(dva.summary) %in% "Dikerogammarus_villosus")], dvd.summary[,!c(colnames(dvd.summary) %in% "Dikerogammarus_villosus")])
+feed.summary = full_join(feed.summary, dvc.summary[,!c(colnames(dvc.summary) %in% "Dikerogammarus_villosus")])
+
+feed.summary = arrange(feed.summary, trial_id)
+
+colnames(feed.summary) = gsub("_", " ", colnames(feed.summary))
+
+# Saving feeding trials output
+write.csv(feed.summary, "R_outputs/Feeding-trials_summary_table.csv")
 ```
 
 
@@ -1159,7 +1183,7 @@ colnames(final.data) = gsub("_", " ", colnames(final.data))
 # Transposing and saving the data frame, we will rearrange the order of the metadata later
 final.data = as.data.frame(t(final.data))
 
-#Saving final output
+# Saving final output
 write.csv(final.data, "R_outputs/Data_summary_table.csv")
 ```
 
