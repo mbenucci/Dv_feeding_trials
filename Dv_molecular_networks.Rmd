@@ -502,6 +502,9 @@ dvc$trial_id = gsub("[.]C${1}","", dvc$sample_id)
 #colnames(dva)
 #dva$trial_repl
 
+#stat_summary(fun.y='mean', geom='text', aes(label=signif(..y..,4),x=as.integer(tag)))+ 
+#stat_summary(fun.y="fun0",fun.ymin='sd', geom='text', aes(label=paste("sd:",signif(..ymin..,2)),x=as.integer(tag)))+
+
 fa = dva %>% mutate(trial_id = factor(trial_id, levels=c("DvA0","DvA4","DvA8","DvA12","DvA24","DvA36"))) %>% mutate(trial_repl = factor(trial_repl, levels=c("control","1","2","3","4","5"))) %>%
   ggplot(aes(pcr_repl, Asellus_aquaticus)) +
   geom_point() +
@@ -526,6 +529,77 @@ fc = dvc %>% mutate(trial_id = factor(trial_id, levels=c("DvG0","DvG4","DvG8","D
 png("R_images/pcr_replicates_feeding_trials.png", width=4000, height=4000, units="px", res=300)
 plot_grid(fa, fd, fc, labels=c("a)","b)","c)"), nrow=1, ncol=3)
 dev.off()
+```
+
+Distribution of DNA reads across PCR replicates
+
+```{r PCR replicates distribution Asellus}
+# Asellus
+print("DvA - repl 1")
+mean(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA0"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA0"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA0"), "Asellus_aquaticus"]))
+
+mean(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA4"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA4"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA4"), "Asellus_aquaticus"]))
+
+mean(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA8"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA8"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA8"), "Asellus_aquaticus"]))
+
+mean(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA12"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA12"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA12"), "Asellus_aquaticus"]))
+
+mean(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA24"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA24"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA24"), "Asellus_aquaticus"]))
+
+mean(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA36"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA36"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 1 & dva$trial_id == "DvA36"), "Asellus_aquaticus"]))
+
+# Asellus replic 2
+print("DvA repl 2")
+mean(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA0"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA0"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA0"), "Asellus_aquaticus"]))
+
+mean(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA4"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA4"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA4"), "Asellus_aquaticus"]))
+
+mean(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA8"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA8"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA8"), "Asellus_aquaticus"]))
+
+mean(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA12"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA12"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA12"), "Asellus_aquaticus"]))
+
+mean(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA24"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA24"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA24"), "Asellus_aquaticus"]))
+
+mean(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA36"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA36"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 2 & dva$trial_id == "DvA36"), "Asellus_aquaticus"]))
+
+# Asellus replic 4
+print("DvA repl 4")
+mean(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA0"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA0"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA0"), "Asellus_aquaticus"]))
+
+mean(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA4"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA4"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA4"), "Asellus_aquaticus"]))
+
+mean(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA8"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA8"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA8"), "Asellus_aquaticus"]))
+
+mean(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA12"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA12"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA12"), "Asellus_aquaticus"]))
+
+mean(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA24"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA24"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA24"), "Asellus_aquaticus"]))
+
+mean(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA36"), "Asellus_aquaticus"])
+sd(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA36"), "Asellus_aquaticus"])/sqrt(length(dva[c(dva$trial_repl == 4 & dva$trial_id == "DvA36"), "Asellus_aquaticus"]))
+```
+
+```{r PCR replicates distribution Daphnia}
+# Daphnia
+print("DvD repl 2")
+mean(dvd[c(dvd$trial_repl == 2 & dvd$trial_id == "DvD4"), "Daphnia_magna"])
+sd(dvd[c(dvd$trial_repl == 2 & dvd$trial_id == "DvD4"), "Daphnia_magna"])/sqrt(length(dvd[c(dvd$trial_repl == 2 & dvd$trial_id == "DvD4"), "Daphnia_magna"]))
 ```
 
 Because we obtained the results from two separate sequencing libraries we need to normalise the DNA reads.
@@ -1160,8 +1234,6 @@ colnames(feed.summary) = gsub("_", " ", colnames(feed.summary))
 # Saving feeding trials output
 write.csv(feed.summary, "R_outputs/Feeding-trials_summary_table.csv")
 ```
-
-
 
 ```{r summary table for wild samples}
 guts.summary = as.data.frame(abund.guts[,!c(colnames(abund.guts) %in% c("sample_id"))] %>% group_by(sample_type,lake,predator_id,site) %>% summarise_all(list(sum)))
