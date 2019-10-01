@@ -970,12 +970,12 @@ seq.high=c("Dvil GW","Dvil WB")
 
 seq.low=c("C.luridus","C.laricomalis","G.tigrinus","B.vejdovskyanum","C.brevilabris","Cricotopus","Cyclopidae","Daphnia","D.polymorpha","G.zaddachi","P.pediculus")
 
-col.network=c("yellow","yellow","red","tan4","cyan3","yellow","cyan3","cyan3","darkorchid3","red","cyan3")
+col.network=c("yellow","yellow","red","tan4","cyan3","yellow","gold3","cyan3","darkorchid3","red","cyan3")
 ```
 
 ```{r legend order}
-name.multi=c("Cladocera","Amphipoda","Diptera","Mollusca","Oligochaeta")
-col.multi=c("cyan3","red","yellow","darkorchid3","tan4")
+name.multi=c("Amphipoda","Cladocera","Copepoda","Diptera","Mollusca","Oligochaeta")
+col.multi=c("red","cyan3","gold3","yellow","darkorchid3","tan4")
 ```
 
 After having set up the orders of taxa in top and bottom levels with their corresponding colours, the bipartite plot and the legend can be generated. The legend was generated separately due to limits in the plot dimensions, which if reduced would have made either the plot, or the legend non readable. The legend and the plot were merged externally to R.
