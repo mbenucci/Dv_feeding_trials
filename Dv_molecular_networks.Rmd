@@ -974,8 +974,8 @@ col.network=c("yellow","yellow","red","tan4","cyan3","yellow","cyan3","cyan3","d
 ```
 
 ```{r legend order}
-name.multi=c("Cladocera","Amphipoda","Diptera","Hydrozoa","Mollusca","Oligochaeta")
-col.multi=c("cyan3","red","yellow","darkcyan","darkorchid3","tan4")
+name.multi=c("Cladocera","Amphipoda","Diptera","Mollusca","Oligochaeta")
+col.multi=c("cyan3","red","yellow","darkorchid3","tan4")
 ```
 
 After having set up the orders of taxa in top and bottom levels with their corresponding colours, the bipartite plot and the legend can be generated. The legend was generated separately due to limits in the plot dimensions, which if reduced would have made either the plot, or the legend non readable. The legend and the plot were merged externally to R.
@@ -1314,6 +1314,14 @@ ggplot(trials.melt[trials.melt$variable != "D.villosus",], aes(times, value)) +
 dev.off()
 ```
 
+```{r publication bipartite}
+# Producing the bipartite network
+png("R_images/publication_bipartite_network.png", width=4000, height=2500, units="px", res=300)
+plotweb(sortweb(web.guts, sort.order="seq", sequence=list(seq.higher=seq.high, seq.lower=seq.low)), method = "normal", y.width.low=0.1, y.width.high=0.08,	y.lim=c(0,3), labsize=2, low.lab.dis=0.05, high.lab.dis=0.1, low.spacing=0.012, high.spacing = 0.11, text.rot=90, col.high="black", col.low=col.network, high.y=2.5, low.y=1.5)
+# Producing the legend
+legend("bottom", legend=name.multi, fill=col.multi, border="black", bty="n", ncol=3, xpd=T, cex=1.7)
+dev.off()
+```
 
 ```{r barplot summary}
 final.melt = full_join(guts, edna)
@@ -1346,7 +1354,7 @@ final.melt[grep("Asplanchna|Euchlanis|Brachionus|Keratella|Philodina|Ploima|Sync
 final.melt[grep("Lype|Leptoceridae|Ecnomus|Oecetis|Ceraclea", final.melt$variable),"order"] = "Trichoptera"
 
 # 20 colours for the Orders
-cols_barplot = c("blue","red","tan4","cyan3","greenyellow","lightskyblue1","yellow","lightpink1","burlywood","deeppink","darkseagreen","darkcyan","palegoldenrod","darkorchid","darkorange","steelblue1","lightcyan1","grey48","darkgreen","khaki3")
+cols_barplot = c("red","tan4","cyan3","greenyellow","gold3","yellow","lightpink1","burlywood","deeppink","darkseagreen","darkcyan","blue","darkorchid","darkorange","olivedrab","grey48","darkgreen","khaki3")
 
 png("R_images/summary_barplot.png", height=4000, width=4000, units="px", res=300)
 final.melt %>% mutate(sample_type = factor(sample_type, levels=c("gut contents","eDNA","kick"))) %>% mutate(lake = factor(lake, levels=c("GW","WB","RB"))) %>%
