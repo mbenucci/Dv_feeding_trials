@@ -910,6 +910,12 @@ guts$predator_id = gsub("[a-z]{5}$", "", gsub("[a-z]{7,}_","",guts$predator_id, 
 guts$lake = NA
 guts[grep("WB", guts$site),"lake"] = "WB"
 guts[grep("GW", guts$site),"lake"] = "GW"
+```
+
+We need to remove the predators from gut contents
+
+```{r removing predators from guts}
+unique(abund.guts$predator_id)
 
 guts[guts$predator_id == "Dvil","Dikerogammarus_villosus"] = 0
 guts[guts$predator_id == "Gtig","Gammarus_tigrinus"] = 0
@@ -923,11 +929,13 @@ abund.guts = as.data.frame(guts)
 abund.guts[,!c(colnames(abund.guts) %in% c("sample_id","sample_type","site","lake","predator_id"))][abund.guts[,!c(colnames(abund.guts) %in% c("sample_id","sample_type","site","lake","predator_id"))] > 0] <- 1
 ```
 
-We need to remove the predators from gut contents
+```{r}
+length(grep("WB", abund.guts$sample_id))
+length(grep("GW", abund.guts$sample_id))
 
-```{r removing predators from guts}
-unique(abund.guts$predator_id)
+which(rowSums(abund.guts[,!c(colnames(abund.guts) %in% c("sample_id","sample_type","site","lake","predator_id"))]) > 0)
 ```
+
 
 ```{r rarefaction curves}
 raref.guts = as.data.frame(abund.guts[grep("Dvil", abund.guts$predator_id),!c(colnames(abund.guts) %in% c("sample_id","sample_type","site"))] %>% group_by(lake, predator_id) %>% summarise_all(list(sum)))
@@ -1361,9 +1369,9 @@ final.melt %>% mutate(sample_type = factor(sample_type, levels=c("gut contents",
   ggplot(aes(sample_type, value)) +
   geom_bar(stat="identity", position="fill", aes(fill=order)) +
   scale_fill_manual(values = cols_barplot, name = "") +
-  scale_y_continuous(expand=c(0,0)) +
+  scale_y_continuous(expand=c(0,0), breaks=c(seq(0,1,0.1))) +
   facet_grid(.~lake) +
-  labs(x="", y="composition (%)") +
+  labs(x="", y="composition (ratio)") +
   guides(fill=guide_legend(ncol=1)) +
   theme(legend.position="right", legend.direction ="vertical", axis.text = element_text(size = 15), 
         strip.text = element_text(size=15), axis.title = element_text(size =15),
